@@ -22,14 +22,29 @@
 </head>
 <body>
 
-<div id="map" role="application" aria-label="Carte du tramway de Bordeaux"></div>
+<div id="app">
+  <section id="mapWrap" aria-label="Carte">
+    <div id="map" role="application" aria-label="Carte du tramway de Bordeaux"></div>
+    <header id="topbar">
+      <span class="brandpill" data-logo title="TBM Tram Radar Bordeaux"></span>
+      <button id="live" class="live" type="button" data-state="loading"><span class="dot"></span><span class="txt">TBM…</span></button>
+      <button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button>
+      <button id="recenter" type="button" class="fab" aria-label="Recentrer sur moi et ma station" title="Recentrer" data-icon="locate"></button>
+    </header>
+    <button id="mapToggle" type="button" class="maptoggle" data-act="map-toggle" aria-pressed="false">Suivre à pied</button>
+  </section>
 
-<header id="topbar">
-  <span class="brandpill" data-logo title="TBM Tram Radar Bordeaux"></span>
-  <button id="live" class="live" type="button" data-state="loading"><span class="dot"></span><span class="txt">TBM…</span></button>
-  <button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button>
-  <button id="recenter" type="button" class="fab" aria-label="Me recentrer avec ma station" title="Me recentrer" data-icon="locate"></button>
-</header>
+  <main id="card" aria-label="Votre tram">
+    <div id="cStation"></div>
+    <div id="cDirs"></div>
+    <div id="cVerdict" aria-live="polite"></div>
+    <div id="cAllure">
+      <div id="cSpeed"></div>
+      <div id="cadence" class="seg seg-sm" role="radiogroup" aria-label="Votre allure"></div>
+    </div>
+  </main>
+</div>
+
 <div id="banner" class="banner hidden" role="status"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="updateBar" class="updatebar hidden" role="status">
@@ -37,12 +52,14 @@
   <button type="button" data-act="update">Mettre à jour</button>
 </div>
 
-<main id="card" aria-label="Votre tram">
-  <div id="cStation"></div>
-  <div id="cDirs" class="dirs scroller" role="radiogroup" aria-label="Direction"></div>
-  <div id="cVerdict" aria-live="polite"></div>
-  <div id="cadence" class="seg seg-sm" role="radiogroup" aria-label="Votre allure"></div>
-</main>
+<dialog id="digest" class="dd" aria-labelledby="digestTitle">
+  <div class="dd-head"><b id="digestTitle">Infos réseau du jour</b><button type="button" class="icon-btn" data-act="digest-close" aria-label="Fermer" data-icon="x"></button></div>
+  <div class="dd-body">
+    <p class="muted">Travaux, fermetures, perturbations annoncées sur le tram, même hors de votre ligne. Affiché une fois par jour ; les alertes qui vous touchent apparaissent directement dans le verdict.</p>
+    <div id="digestBody"></div>
+    <div class="acts-line" style="margin-top:14px"><button type="button" class="btn" data-act="digest-close">Compris</button></div>
+  </div>
+</dialog>
 
 <dialog id="details" class="dd" aria-label="Détails">
   <div class="dd-head"><b>Détails</b><button type="button" class="icon-btn" data-act="details-close" aria-label="Fermer" data-icon="x"></button></div>

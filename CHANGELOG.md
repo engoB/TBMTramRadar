@@ -3,6 +3,14 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 4.1.0
+- Le panneau passe au premier plan ; la carte devient un bandeau secondaire, agrandissable (« Suivre à pied »).
+- Fond de carte OpenStreetMap (le fond CARTO exige désormais une clé et affichait « APIKEY REQUIRED »).
+- Directions en tuiles : terminus, prochain passage, couleur du verdict.
+- Verdict calculé sur votre vitesse réelle dès que vous marchez, sinon sur l'allure réglée.
+- Course tram / vous redessinée : plus épaisse, plus lisible.
+- Info trafic : alerte dans le verdict seulement si votre ligne ou votre station est touchée ; résumé « Infos réseau du jour » une fois par jour.
+
 ## 4.0.0
 - Écran unique sans défilement : la carte reste visible, une seule carte en bas avec l'essentiel.
 - Station la plus proche uniquement (à pied), ou la suivante si la plus proche n'a aucun départ.

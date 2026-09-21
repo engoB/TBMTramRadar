@@ -10,6 +10,9 @@ window.TBM_CONFIG = {
   // Relais CORS par défaut (vide = accès direct). Exemple : 'https://tbm-relais.monnom.workers.dev/?url={url}'
   proxy: '',
 
+  // Fond de carte (OpenStreetMap). Remplaçable par tout serveur de tuiles {z}/{x}/{y}.
+  tiles: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19 },
+
   // Calcul d'itinéraire piéton réel (OSRM, profil piéton, serveur FOSSGIS basé sur OpenStreetMap)
   router: 'https://routing.openstreetmap.de/routed-foot',
 

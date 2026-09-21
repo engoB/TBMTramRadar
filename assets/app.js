@@ -127,7 +127,7 @@ const state = {
   lineMeta: Object.fromEntries(LINE_IDS.map(l => [l, { color: CFG.lines[l].color, shapes: null }])),
   user: null, mode: 'gps', lastGps: null, gps: 'search', firstFix: true,
   activeLines: new Set(savedLines.length ? savedLines : LINE_IDS),
-  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, needFit: false,
+  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
   recents: store.get('tbm-recents') || [],
   cadence: store.get('tbm-cadence') || 'normal',
   bannerDismissed: { far: false, nogps: false }, bannerKind: null,
@@ -481,7 +481,7 @@ async function ensureRouteGeom(st) {
   } catch (_) { state.routerOk = false; }
   finally { routeBusy = false; tickUi(true); }
 }
-function walkFor(st, kmh = kmhOf(state.cadence)) {
+function walkFor(st, kmh = state.kmhNow || kmhOf(state.cadence)) {
   if (!state.user || !st) return null;
   const crow = hav(state.user.ll, st.ll), r = walkCache.get(st.id);
   let dist, routed = false;
@@ -576,14 +576,14 @@ function computeCtx(now) {
    ========================================================= */
 const isDesk = () => window.matchMedia('(min-width: 768px)').matches;
 const map = L.map('map', { zoomControl: false, attributionControl: false, minZoom: 10, maxZoom: 19 }).setView(CENTER, 13);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 20 }).addTo(map);
+L.tileLayer((CFG.tiles && CFG.tiles.url) || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: (CFG.tiles && CFG.tiles.maxZoom) || 19, crossOrigin: true }).addTo(map);
 if (isDesk()) L.control.zoom({ position: 'bottomright' }).addTo(map);
 map.addControl(new (L.Control.extend({
   options: { position: 'bottomright' },
   onAdd() {
     const d = L.DomUtil.create('div', 'attr');
     d.innerHTML = `<button type="button" aria-label="Sources de la carte et des données" aria-expanded="false">i</button>
-      <span class="attr-txt">&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>, données TBM, itinéraires OSRM</span>`;
+      <span class="attr-txt">&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, données TBM, itinéraires OSRM</span>`;
     L.DomEvent.disableClickPropagation(d);
     const b = d.querySelector('button');
     b.addEventListener('click', () => b.setAttribute('aria-expanded', String(d.classList.toggle('open'))));
@@ -885,14 +885,26 @@ function updateTripLayers(ctx) {
     walkLine.setStyle({ color: v === 'green' ? '#15803d' : v === 'orange' ? '#d97706' : v === 'red' ? '#dc2626' : '#0f172a' });
   } else walkLine.setLatLngs([]);
 }
+function realSpeed() {
+  if (state.mode !== 'gps') return null;
+  const now = Date.now(), s = state.speedSamples.filter(x => now - x.t < 30000);
+  if (s.length < 2 || now - s[s.length - 1].t > 15000) return null;
+  const sp = s.map(x => x.v).filter(v => v != null);
+  let kmh;
+  if (sp.length >= 2) { const last = sp.slice(-5); kmh = last.reduce((a, b) => a + b, 0) / last.length * 3.6; }
+  else {
+    const a = s[0], b = s[s.length - 1], dt = (b.t - a.t) / 1000, dd = hav(a.ll, b.ll);
+    if (dt < 8 || dd < Math.max(a.acc, b.acc)) return null;
+    kmh = dd / dt * 3.6;
+  }
+  return kmh >= 2 && kmh <= 22 ? kmh : null;
+}
 function fitTrip(animate) {
   if (!state.user) return;
   const pts = [state.user.ll];
   if (lastCtx && lastCtx.board) pts.push(lastCtx.board.ll);
-  const bottom = (isDesk() ? 20 : cardHeight()) + 24;
-  const left = isDesk() ? 440 : 28;
   if (pts.length === 1) { map.setView(pts[0], 16, { animate }); return; }
-  map.flyToBounds(L.latLngBounds(pts), { paddingTopLeft: [left, 80], paddingBottomRight: [28, bottom], maxZoom: 17, duration: animate ? .8 : 0 });
+  map.flyToBounds(L.latLngBounds(pts), { paddingTopLeft: [24, 64], paddingBottomRight: [24, 40], maxZoom: 17, duration: animate ? .8 : 0 });
 }
 
 /* =========================================================
@@ -940,6 +952,10 @@ function onPos(pos) {
   const ll = [pos.coords.latitude, pos.coords.longitude], acc = pos.coords.accuracy;
   state.lastGps = { ll, acc };
   state.gps = 'ok';
+  if (acc < 40) {
+    state.speedSamples.push({ t: Date.now(), ll, acc, v: pos.coords.speed != null && pos.coords.speed >= 0 ? pos.coords.speed : null });
+    state.speedSamples = state.speedSamples.filter(x => Date.now() - x.t < 60000);
+  }
   if (state.bannerKind === 'nogps') hideBanner();
   if (state.mode === 'gps') {
     setUser(ll, acc, 'gps');
@@ -1016,12 +1032,15 @@ map.on('click', e => {
 /* =========================================================
    Interface : une seule carte fixe, sans défilement
    ========================================================= */
-const card = $('#card');
-const cardHeight = () => card.offsetHeight || 0;
-function sheetVisible() { return isDesk() ? 0 : cardHeight(); }
-function syncCardHeight() { document.documentElement.style.setProperty('--card-h', (isDesk() ? 0 : cardHeight()) + 'px'); }
-if (typeof ResizeObserver === 'function') new ResizeObserver(syncCardHeight).observe(card);
+function sheetVisible() { return 0; }
+function syncCardHeight() { map.invalidateSize(); }
 window.addEventListener('resize', syncCardHeight);
+function setMapBig(big) {
+  document.body.classList.toggle('map-big', big);
+  $('#mapToggle').setAttribute('aria-pressed', String(big));
+  $('#mapToggle').innerHTML = big ? `${svg('x', 16)}Réduire` : `${svg('map', 16)}Suivre à pied`;
+  setTimeout(() => { map.invalidateSize(); fitTrip(true); }, 320);
+}
 
 const setHTML = (el, html) => { if (el._h !== html) { el.innerHTML = html; el._h = html; return true; } return false; };
 function renderLive() {
@@ -1051,103 +1070,142 @@ function ringOf(st) {
   return cols.length > 1 ? `conic-gradient(${cols.map((c, i) => `${c} ${(i / cols.length * 360).toFixed(1)}deg ${((i + 1) / cols.length * 360).toFixed(1)}deg`).join(',')})` : cols[0];
 }
 
+/* 1. Où je suis */
 function renderStation(ctx) {
   const el = $('#cStation');
   if (!ctx.board) return setHTML(el, '');
   const w = ctx.boardW, st = ctx.board;
-  const alerts = relevantMessages([...st.lines], [st.id]).length;
-  const sub = (ctx.forced ? 'Station choisie' : ctx.skipped ? `Plus proche avec départs (${ctx.skipped.name} : aucun)` : 'La plus proche') + (w ? `, ${fmtDist(w.dist)} à pied${w.routed ? '' : ' (estimé)'}` : '');
+  const sub = (ctx.forced ? 'Station choisie' : ctx.skipped ? `Plus proche avec départs` : 'Station la plus proche') + (w ? ` · ${fmtDist(w.dist)}, ${fmtWalk(w.sec)} à pied` : '');
+  const n = state.messages.length;
   setHTML(el, `<div class="st-row">
-    <span class="stn" style="--ring:${ringOf(st)};--s:24px;--p:4px"><i></i></span>
+    <span class="stn" style="--ring:${ringOf(st)};--s:26px;--p:5px"><i></i></span>
     <div class="st-main"><b>${esc(st.name)}</b><small>${sub}</small></div>
     ${ctx.forced ? '<button type="button" class="chipbtn" data-act="from-clear">La plus proche</button>' : ''}
-    <button type="button" class="icon-btn more" data-act="details" aria-label="Tous les passages et infos trafic">${svg('list', 20)}${alerts ? `<span class="pip">${alerts}</span>` : ''}</button>
+    ${n ? `<button type="button" class="chipinfo ${digestUnseen() ? 'new' : ''}" data-act="digest" aria-label="${n} info(s) réseau du jour">${svg('alert', 15)}${n}</button>` : ''}
+    <button type="button" class="icon-btn more" data-act="details" aria-label="Tous les passages">${svg('list', 20)}</button>
   </div>`);
 }
 
-let lastSel = null;
+/* 2. Dans quel sens : tuiles par terminus, avec leur prochain passage et leur couleur de verdict */
 function renderDirs(ctx) {
   const el = $('#cDirs');
   if (!ctx.groups || !ctx.groups.length) return setHTML(el, '');
   const sel = ctx.g && ctx.g.key;
-  const gs = [...ctx.groups].sort((a, b) => a.line.localeCompare(b.line) || a.dest.localeCompare(b.dest, 'fr'));
-  const changed = setHTML(el, gs.map(g => {
-    const p = g.list[0];
-    return `<button type="button" class="dir" role="radio" aria-checked="${g.key === sel}" data-dir="${esc(g.key)}" title="Ligne ${esc(g.line)} vers ${esc(g.dest)}">
-      ${badge(g.line, 'sm')}<span class="nm">${esc(g.dest)}</span><span class="vd ${p.v ? 'v-' + p.v : ''}"></span>${cdSpan(p, 'min')}</button>`;
-  }).join(''));
-  if (changed || sel !== lastSel) {
-    lastSel = sel;
-    const b = el.querySelector('[aria-checked="true"]');
-    if (b) { const left = Math.max(0, b.offsetLeft - 12); if (el.scrollTo) el.scrollTo({ left, behavior: 'smooth' }); else el.scrollLeft = left; }
+  let gs = [...ctx.groups].sort((a, b) => a.line.localeCompare(b.line) || a.dest.localeCompare(b.dest, 'fr'));
+  const MAX = 6;
+  let more = 0;
+  if (gs.length > MAX) {
+    const keep = gs.slice(0, MAX - 1);
+    if (sel && !keep.some(g => g.key === sel)) keep[MAX - 2] = gs.find(g => g.key === sel);
+    more = gs.length - keep.length;
+    gs = keep;
   }
+  setHTML(el, `<div class="dirs-h">Votre direction</div><div class="tiles">${gs.map(g => {
+    const p = g.list[0];
+    return `<button type="button" class="tile ${p.v ? 'v-' + p.v : ''}" role="radio" aria-checked="${g.key === sel}" data-dir="${esc(g.key)}" aria-label="Ligne ${esc(g.line)} vers ${esc(g.dest)}">
+      <span class="tile-top">${badge(g.line, 'sm')}<span class="cd-wrap">${cdSpan(p, 'min')}</span></span>
+      <span class="tile-nm">${esc(g.dest)}</span></button>`;
+  }).join('')}${more ? `<button type="button" class="tile tile-more" data-act="details">+${more} direction${more > 1 ? 's' : ''}</button>` : ''}</div>`);
 }
 
-/* Frise intégrée : sur la même échelle de temps, l'arrivée du tram à quai et la vôtre */
-function strip(p, now) {
-  const c = p.j.calls, pos = tramPos(p.j, now);
+/* 3. Est-ce que je l'ai : verdict, compte à rebours, course tram / vous */
+function race(p, now) {
   const walk = p.w ? p.w.sec : null;
-  const span = Math.max(p.depIn, walk || 0, 60) * 1.1 + 10;
-  const X = t => clamp(t / span * 100, 0, 100);
-  const start = pos ? Math.min(pos.next, p.i) : p.i;
-  let dots = '';
-  for (let k = start; k < p.i; k++) dots += `<span class="sp-dot" style="left:${X(c[k].arr - now).toFixed(1)}%"></span>`;
-  const a = X(Math.max(0, p.arrIn)), d = X(p.depIn);
-  const lab = (x, cls, txt) => `<span class="sp-lab ${cls}" style="left:${clamp(x, 8, 92).toFixed(1)}%">${txt}</span>`;
-  return `<div class="strip" style="--c:${lineColor(p.line)}" aria-hidden="true">
-    <span class="sp-trk"></span><span class="sp-now"></span>
-    <span class="sp-quai" style="left:${a.toFixed(1)}%;width:${Math.max(2, d - a).toFixed(1)}%"></span>
-    ${dots}<span class="sp-pin" style="left:${a.toFixed(1)}%"></span>
-    ${lab(a, 'up', `tram ${p.arrIn > 0 ? fmtClockS(p.tArr) : 'à quai'}`)}
-    ${walk != null ? `<span class="sp-me" style="left:${X(walk).toFixed(1)}%"></span>${lab(X(walk), 'down', `vous ${fmtClockS(now + walk)}`)}` : ''}
+  const span = Math.max(p.depIn, walk || 0, 60) * 1.08 + 10;
+  const X = t => clamp(t / span * 100, 3, 97);
+  const a = X(Math.max(0, p.arrIn)), d = X(p.depIn), m = walk != null ? X(walk) : null;
+  const lab = (x, cls, html) => `<span class="race-lab ${cls} ${x < 18 ? 'al' : x > 82 ? 'ar' : ''}" style="left:${x.toFixed(1)}%">${html}</span>`;
+  return `<div class="race" style="--c:${lineColor(p.line)}" aria-hidden="true">
+    <span class="race-trk"></span>
+    <span class="race-quai" style="left:${a.toFixed(1)}%;width:${Math.max(1.5, d - a).toFixed(1)}%"></span>
+    ${lab(a, 'up', `<b>Tram</b> ${p.arrIn > 0 ? fmtClockS(p.tArr) : 'à quai'}`)}
+    <span class="race-tram" style="left:${a.toFixed(1)}%">${esc(p.line)}</span>
+    ${m != null ? `<span class="race-me" style="left:${m.toFixed(1)}%">${svg('walk', 16)}</span>${lab(m, 'down', `<b>Vous</b> ${fmtClockS(now + walk)}`)}` : ''}
   </div>`;
 }
 function whereText(p, now) {
   const pos = tramPos(p.j, now), c = p.j.calls;
-  if (!pos) return `part du terminus à ${fmtClock(c[0].dep)}`;
-  if (pos.dwell && pos.at === p.i) return 'à quai maintenant';
+  if (!pos) return `Part du terminus à ${fmtClock(c[0].dep)}`;
+  if (pos.dwell && pos.at === p.i) return 'À quai maintenant';
   const n = pos.dwell ? p.i - pos.at : p.i - pos.next;
-  if (n <= 0) return 'arrive à la station';
-  return pos.dwell ? `à quai à ${stName(c[pos.at].st)}, ${n} arrêt${n > 1 ? 's' : ''} avant` : `${n} arrêt${n > 1 ? 's' : ''} avant votre station`;
+  if (n <= 0) return 'Arrive à la station';
+  return pos.dwell ? `À quai à ${stName(c[pos.at].st)}, ${n} arrêt${n > 1 ? 's' : ''} avant` : `${n} arrêt${n > 1 ? 's' : ''} avant votre station`;
 }
 function simButtons() {
   return `<div class="acts"><button class="btn" type="button" data-act="sim" data-spot="bourse">${svg('pin', 16)}Place de la Bourse</button><button class="btn ghost" type="button" data-act="sim" data-spot="quinconces">Quinconces</button></div>`;
 }
 function renderVerdict(ctx) {
   const el = $('#cVerdict');
-  const box = (cls, h, t, extra = '') => setHTML(el, `<div class="vb ${cls}"><div class="vb-msg"><strong>${h}</strong><span>${t}</span></div>${extra}</div>`);
+  const box = (cls, h, t, extra = '') => setHTML(el, `<div class="vb ${cls}"><div class="vb-head"><strong>${h}</strong></div><div class="vb-sub">${t}</div>${extra}</div>`);
   if (state.api === 'error' && !state.journeys.length) {
     const blocked = state.apiErrorKind === 'blocked' || state.apiErrorKind === 'proxy';
-    return box('v-red', 'Temps réel TBM indisponible', `${esc(state.apiError)}.`,
+    return box('v-red', 'Temps réel indisponible', `${esc(state.apiError)}.`,
       `<div class="acts"><button class="btn" type="button" data-act="retry">Réessayer</button>${blocked ? '<button class="btn ghost" type="button" data-act="settings">Configurer un relais</button>' : ''}</div>`);
   }
-  if (!state.stopsReady || (!state.lastUpdate && state.api === 'loading')) return box('', 'Connexion au temps réel TBM…', 'Chargement des stations et des passages.');
+  if (!state.stopsReady || (!state.lastUpdate && state.api === 'loading')) return box('', 'Connexion au temps réel…', 'Chargement des stations et des passages TBM.');
   if (!ctx.board) return box('', 'Où êtes-vous ?', 'Autorisez la localisation, touchez la carte, ou simulez une position.', simButtons());
   const p = ctx.primary;
-  if (!p) return box('', 'Aucun départ dans l\u2019heure', state.journeys.length ? 'Rien d\u2019annoncé à cette station pour les lignes affichées.' : 'Aucun tram annoncé sur le réseau : service probablement terminé.');
+  if (!p) return box('', 'Aucun départ dans l\u2019heure', state.journeys.length ? 'Rien d\u2019annoncé à cette station pour les lignes affichées.' : 'Aucun tram annoncé : service probablement terminé.');
   const now = ctx.now, v = p.v;
   let head, sub;
-  if (!p.w) { head = 'Où êtes-vous ?'; sub = 'Placez votre repère pour le verdict.'; }
+  if (!p.w) { head = 'Où êtes-vous ?'; sub = 'Placez votre repère pour savoir si vous l\u2019aurez.'; }
   else if (v === 'red') {
     head = 'Trop tard';
     const n = ctx.nextCatch;
-    sub = n ? `Suivant dans ${cdSpan(n, 'min')} : ${n.v === 'green' ? 'vous l\u2019aurez' : 'en pressant le pas'}` : 'Aucun tram attrapable annoncé';
+    sub = n ? `Le suivant arrive dans <b>${cdSpan(n, 'min')}</b> : ${n.v === 'green' ? 'celui-là, vous l\u2019aurez' : 'jouable en pressant le pas'}.` : 'Aucun tram attrapable parmi les passages annoncés.';
   } else {
     head = v === 'green' ? 'Vous l\u2019avez' : 'Pressez le pas !';
     const slack = p.arrIn - p.w.sec - 30;
-    sub = slack > 60 ? `Partez dans ${fmtMS(slack)}` : v === 'green' ? 'Partez maintenant' : `Partez maintenant, ${fmtKmh(p.w.dist / Math.max(1, p.depIn - CFG.walk.platformSec) * 3.6)} minimum`;
+    sub = slack > 60 ? `Vous pouvez partir dans <b>${fmtMS(slack)}</b>.` : v === 'green' ? '<b>Partez maintenant</b>, tranquillement.' : `<b>Partez maintenant</b>, au moins ${fmtKmh(p.w.dist / Math.max(1, p.depIn - CFG.walk.platformSec) * 3.6)}.`;
   }
-  const alerts = relevantMessages([p.line], [p.S.id]);
-  const delay = p.delay != null && Math.abs(p.delay) >= 60 ? `<span class="delay">${p.delay > 0 ? '+' : ''}${Math.round(p.delay / 60)} min</span>` : '';
+  const impact = relevantMessages([p.line], [p.S.id]);
+  const delay = p.delay != null && Math.abs(p.delay) >= 60 ? `<span class="delay">${p.delay > 0 ? 'retard +' : 'avance '}${Math.abs(Math.round(p.delay / 60))} min</span>` : '';
   setHTML(el, `<div class="vb ${v ? 'v-' + v : ''}">
-    <div class="vb-top">
-      <div class="vb-msg"><strong>${head}</strong><span>${sub}</span></div>
-      <div class="vb-cd">${cdSpan(p)}<small>${p.arrIn > 0 ? 'à quai' : 'repart ' + fmtClockS(p.tDep)}</small></div>
+    <div class="vb-head">
+      <strong>${head}</strong>
+      <div class="vb-cd">${cdSpan(p)}<small>${p.arrIn > 0 ? 'avant l\u2019arrivée' : 'repart ' + fmtClockS(p.tDep)}</small></div>
     </div>
-    ${strip(p, now)}
-    <div class="vb-foot">${badge(p.line, 'sm')}<span class="grow">${esc(whereText(p, now))}</span>${delay}${p.live ? '<span class="rt">direct</span>' : '<span class="rt theo">théorique</span>'}
-      ${alerts.length ? `<button type="button" class="alertchip" data-act="details">${svg('alert', 14)}Info trafic</button>` : ''}</div>
+    <div class="vb-sub">${sub}</div>
+    ${race(p, now)}
+    <div class="vb-foot"><span>${esc(whereText(p, now))}</span>${delay}${p.live ? '<span class="rt">temps réel</span>' : '<span class="rt theo">théorique</span>'}</div>
+    ${impact.length ? `<button type="button" class="impact" data-act="details">${svg('alert', 16)}<span>${esc((impact[0].title || impact[0].body).slice(0, 110))}</span></button>` : ''}
   </div>`);
+}
+
+/* 4. Allure réglée, remplacée par votre vitesse réelle dès que vous marchez */
+function renderSpeed() {
+  const el = $('#cSpeed');
+  const preset = CADENCES.find(c => c.id === state.cadence) || CADENCES[1];
+  if (state.realKmh) setHTML(el, `<span class="spd on"><i></i>Calculé sur votre vitesse réelle : <b>${fmtKmh(state.realKmh)}</b></span>`);
+  else setHTML(el, `<span class="spd"><i></i>Calculé sur l\u2019allure ${preset.label.toLowerCase()} (${fmtKmh(preset.kmh)})${state.mode === 'gps' ? ', vitesse réelle dès que vous marchez' : ''}</span>`);
+}
+
+/* Infos réseau du jour : affichées une fois par jour, puis sur demande */
+const today = () => new Date().toISOString().slice(0, 10);
+const msgKey = m => norm(m.body).slice(0, 60);
+function digestUnseen() {
+  const seen = store.get('tbm-digest') || {};
+  const keys = seen.day === today() ? seen.keys || [] : [];
+  return state.messages.some(m => !keys.includes(msgKey(m)));
+}
+function openDigest() {
+  const d = $('#digest');
+  const mine = lastCtx && lastCtx.board ? [...lastCtx.board.lines] : [];
+  const list = state.messages.map(m => ({ m, me: m.lines.some(l => mine.includes(l)) })).sort((a, b) => b.me - a.me);
+  $('#digestBody').innerHTML = list.length ? list.map(({ m, me }) => `<div class="msg ${me ? 'mine' : ''}"><div class="msg-h">${m.lines.map(l => badge(l, 'sm')).join('')}</div>
+      <div class="msg-t">${esc(m.title || m.body.slice(0, 90))}</div>${m.title || m.body.length > 90 ? `<div class="msg-b">${esc(m.body)}</div>` : ''}
+      ${m.until ? `<div class="msg-v">Jusqu'au ${toDate(m.until).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>` : ''}</div>`).join('')
+    : '<p class="muted">Aucune information particulière sur le tram aujourd\u2019hui.</p>';
+  store.set('tbm-digest', { day: today(), keys: state.messages.map(msgKey) });
+  if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
+  tickUi(true);
+}
+function maybeDailyDigest() {
+  if (!state.msgFresh || state.msgError || !state.messages.length) return;
+  const seen = store.get('tbm-digest') || {};
+  if (seen.day === today()) return;
+  if ($('#details').open || $('#cfg').open) return;
+  openDigest();
 }
 
 /* Détails (hors de l'écran principal) : tous les passages, infos trafic, lignes, réglages */
@@ -1188,12 +1246,14 @@ function tickUi(force) {
   const now = nowS();
   if (!force && now - lastUi < 1) return;
   lastUi = now;
+  state.realKmh = realSpeed();
+  state.kmhNow = state.realKmh || kmhOf(state.cadence);
   const ctx = computeCtx(now);
   lastCtx = ctx;
   if (ctx.board && lastBoardId && ctx.board.id !== lastBoardId && !ctx.forced) toast(`Station la plus proche : ${ctx.board.name}`);
   lastBoardId = ctx.board ? ctx.board.id : null;
   setRoles(ctx.board ? ctx.board.id : null, null);
-  renderStation(ctx); renderDirs(ctx); renderVerdict(ctx); renderDetails(ctx);
+  renderStation(ctx); renderDirs(ctx); renderVerdict(ctx); renderSpeed(); renderDetails(ctx); maybeDailyDigest();
   updateTripLayers(ctx);
   refreshPopup();
   renderLive();
@@ -1218,6 +1278,9 @@ function onAction(e) {
     else if (a === 'from-clear') { state.fromId = null; state.needFit = true; tickUi(true); }
     else if (a === 'details') openDetails();
     else if (a === 'details-close') $('#details').close();
+    else if (a === 'digest') openDigest();
+    else if (a === 'digest-close') $('#digest').close();
+    else if (a === 'map-toggle') setMapBig(!document.body.classList.contains('map-big'));
     else if (a === 'retry') { toast('Nouvelle tentative…'); boot(true); }
     else if (a === 'settings') { if ($('#details').open) $('#details').close(); openCfg(); }
     else if (a === 'cfg-close') $('#cfg').close();
@@ -1247,6 +1310,7 @@ function onAction(e) {
 }
 document.addEventListener('click', onAction);
 $('#details').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+$('#digest').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#cadence').addEventListener('click', e => {
   const b = e.target.closest('[data-cadence]'); if (!b) return;
   state.cadence = b.dataset.cadence;
