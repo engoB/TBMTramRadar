@@ -1,0 +1,30 @@
+{
+ "version": 1,
+ "source": "fallback",
+ "generated": null,
+ "note": "Remplacé au déploiement par tools/build_network.py (couleurs et tracés GTFS officiels).",
+ "lines": {
+  "A": {
+   "color": "#852d7e",
+   "shapes": []
+  },
+  "B": {
+   "color": "#00893e",
+   "shapes": []
+  },
+  "C": {
+   "color": "#e2007a",
+   "shapes": []
+  },
+  "D": {
+   "color": "#d8232a",
+   "shapes": []
+  },
+  "E": {
+   "shapes": []
+  },
+  "F": {
+   "shapes": []
+  }
+ }
+}
