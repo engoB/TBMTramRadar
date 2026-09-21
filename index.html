@@ -24,63 +24,30 @@
 
 <div id="map" role="application" aria-label="Carte du tramway de Bordeaux"></div>
 
-<header id="top">
-  <div class="topcol">
-    <div class="brand">TBM Tram Radar <small>Bordeaux</small></div>
-    <div class="searchbox" role="search">
-      <span class="logo" data-logo title="TBM Tram Radar Bordeaux"></span>
-      <input id="q" type="search" inputmode="search" autocomplete="off" spellcheck="false" enterkeyhint="go"
-             placeholder="Où allez-vous ?" aria-label="Station de destination" aria-controls="results" aria-expanded="false">
-      <button id="qClear" class="icon-btn hidden" type="button" aria-label="Effacer la destination" data-icon="x"></button>
-      <button id="live" class="live" type="button" data-state="loading" title="État du temps réel TBM"><span class="dot"></span><span class="txt">TBM…</span></button>
-    </div>
-    <div id="results" class="results hidden" role="listbox" aria-label="Destinations"></div>
-    <div class="row2 scroller">
-      <button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">Recherche GPS…</span></button>
-      <div id="chips" class="chips" role="group" aria-label="Lignes affichées"></div>
-    </div>
-    <div id="banner" class="banner hidden" role="status"></div>
-  </div>
+<header id="topbar">
+  <span class="brandpill" data-logo title="TBM Tram Radar Bordeaux"></span>
+  <button id="live" class="live" type="button" data-state="loading"><span class="dot"></span><span class="txt">TBM…</span></button>
+  <button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button>
+  <button id="recenter" type="button" class="fab" aria-label="Me recentrer avec ma station" title="Me recentrer" data-icon="locate"></button>
 </header>
-
-<div id="fabs">
-  <button id="fitNet" type="button" class="fab" aria-label="Voir tout le réseau" title="Voir tout le réseau" data-icon="map"></button>
-  <button id="recenter" type="button" class="fab" aria-label="Centrer sur ma position" title="Centrer sur ma position" data-icon="locate"></button>
-</div>
-
+<div id="banner" class="banner hidden" role="status"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="updateBar" class="updatebar hidden" role="status">
   <span id="updateTxt">Nouvelle version prête</span>
   <button type="button" data-act="update">Mettre à jour</button>
 </div>
 
-<section id="sheet" aria-label="Votre tram">
-  <div id="sheetHead">
-    <button id="handle" class="handle" type="button" aria-label="Agrandir le panneau"><span></span></button>
-    <div id="summary"></div>
-  </div>
-  <div id="sheetBody">
-    <section id="pVerdict" class="panel panel-verdict" aria-live="polite"></section>
-    <section class="panel panel-compact">
-      <div class="panel-h"><h2>Votre allure</h2><span class="panel-meta" id="walkSource"></span></div>
-      <div id="cadence" class="seg" role="radiogroup" aria-label="Allure de marche"></div>
-    </section>
-    <section id="pOptions" class="panel"></section>
-    <section id="pDeps" class="panel"></section>
-    <section id="pInfo" class="panel"></section>
-    <footer class="legend">
-      <div class="lg">
-        <span><i class="vd v-green"></i>Vert : vous serez sur le quai plus de 2 min avant le tram.</span>
-        <span><i class="vd v-orange"></i>Orange : c'est serré, à une minute près.</span>
-        <span><i class="vd v-red"></i>Rouge : il sera reparti avant votre arrivée.</span>
-      </div>
-      <p>Horaires : flux temps réel officiel TBM (SIRI Lite, Bordeaux Métropole, Licence Ouverte). Les comptes à rebours sont calés sur l'horloge du serveur TBM. Point vert : horaire suivi en direct ; point gris : horaire théorique.</p>
-      <p>Marche : itinéraire piéton réel calculé sur OpenStreetMap, plus 20 s pour rejoindre le quai. Position des rames estimée d'après leurs heures de passage.</p>
-      <p class="acts-line"><button type="button" class="btn ghost" data-act="settings">Réglages</button><button type="button" class="btn ghost" data-act="check-update">Vérifier les mises à jour</button></p>
-      <p class="wordmark">TBM Tram Radar Bordeaux <span id="versionTxt"></span></p>
-    </footer>
-  </div>
-</section>
+<main id="card" aria-label="Votre tram">
+  <div id="cStation"></div>
+  <div id="cDirs" class="dirs scroller" role="radiogroup" aria-label="Direction"></div>
+  <div id="cVerdict" aria-live="polite"></div>
+  <div id="cadence" class="seg seg-sm" role="radiogroup" aria-label="Votre allure"></div>
+</main>
+
+<dialog id="details" class="dd" aria-label="Détails">
+  <div class="dd-head"><b>Détails</b><button type="button" class="icon-btn" data-act="details-close" aria-label="Fermer" data-icon="x"></button></div>
+  <div id="ddBody" class="dd-body"></div>
+</dialog>
 
 <dialog id="cfg" class="cfg" aria-labelledby="cfgTitle">
   <div class="cfg-in">

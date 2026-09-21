@@ -1,14 +1,14 @@
 # TBM Tram Radar Bordeaux
 
-Web app mobile : « je suis ici, je vais là : quelle station, quel tram, et est-ce que je l'ai ? »
-Temps réel officiel TBM, itinéraire piéton réel, verdict vert / orange / rouge selon votre allure.
+Web app mobile, un seul écran : la station la plus proche, le sens choisi (terminus), et en temps réel
+« est-ce que je l'ai ? » selon votre allure. Temps réel officiel TBM, itinéraire piéton réel.
 
 ## Mise en ligne sur GitHub Pages (5 minutes)
 
 1. Créez un dépôt GitHub (public, ou privé avec un compte qui autorise Pages).
 2. Envoyez le contenu de ce dossier sur la branche `main` :
    ```bash
-   git init && git add . && git commit -m "TBM Tram Radar 3.0.0"
+   git init && git add . && git commit -m "TBM Tram Radar 4.0.0"
    git branch -M main
    git remote add origin https://github.com/VOTRE-COMPTE/tbm-tram-radar.git
    git push -u origin main
