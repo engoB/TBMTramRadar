@@ -1,0 +1,10 @@
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Votre position sert à trouver la station de tram la plus proche, à calculer votre trajet à pied et votre vitesse de marche. Elle n'est ni enregistrée ni partagée.</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>fr</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleDarkContent</string>
+	<key>UIRequiresFullScreen</key>
+	<true/>

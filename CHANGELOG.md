@@ -3,6 +3,16 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.0.0
+- Conçue comme une app iOS : barre de navigation, contrôle segmenté « Tram | Carte », feuilles avec poignée, polices système.
+- Vue Tram plein écran sans défilement ; vue Carte plein écran avec suivi du trajet activable et résumé du verdict.
+- Direction choisie avec des flèches gauche / droite (ou un glissement) parmi les terminus desservis par la station.
+- Verdict en grand sur fond vert / orange / rouge, compte à rebours très lisible, prochains passages.
+- Alerte de départ « Me prévenir » (notification locale reprogrammée si le tram prend du retard).
+- Favoris, partage, ouverture dans Plans, retour haptique, présentation au premier lancement.
+- Enveloppe iOS Capacitor, textes d'autorisation, manifeste de confidentialité, politique de confidentialité.
+- Leaflet embarqué (plus de CDN tiers), polices système (plus de Google Fonts).
+
 ## 4.1.0
 - Le panneau passe au premier plan ; la carte devient un bandeau secondaire, agrandissable (« Suivre à pied »).
 - Fond de carte OpenStreetMap (le fond CARTO exige désormais une clé et affichait « APIKEY REQUIRED »).

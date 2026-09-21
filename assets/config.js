@@ -10,6 +10,9 @@ window.TBM_CONFIG = {
   // Relais CORS par défaut (vide = accès direct). Exemple : 'https://tbm-relais.monnom.workers.dev/?url={url}'
   proxy: '',
 
+  // Lien d'assistance affiché dans « À propos » (obligatoire pour l'App Store : page web ou mailto:)
+  support: '',
+
   // Fond de carte (OpenStreetMap). Remplaçable par tout serveur de tuiles {z}/{x}/{y}.
   tiles: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19 },
 

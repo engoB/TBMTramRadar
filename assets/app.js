@@ -97,6 +97,14 @@ const ICONS = {
   list: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
   compass: '<circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/>',
   clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  chevL: '<path d="m15 18-6-6 6-6"/>',
+  chevR: '<path d="m9 18 6-6-6-6"/>',
+  star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+  starFill: '<path fill="currentColor" d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+  bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+  bellOn: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M22 8c0-2.3-.8-4.3-2-6"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/><path d="M4 2C2.8 3.7 2 5.7 2 8"/>',
+  share: '<path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>',
+  more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
   wifi: '<path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/>'
 };
 const svg = (name, size = 20) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -104,6 +112,16 @@ const LOGO = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke
   <path d="M12 3a9 9 0 0 1 9 9" stroke="#852d7e"/><path d="M21 12a9 9 0 0 1-9 9" stroke="#00893e"/>
   <path d="M12 21a9 9 0 0 1-9-9" stroke="#e2007a"/><path d="M3 12a9 9 0 0 1 9-9" stroke="#d8232a"/>
   <circle cx="12" cy="12" r="3.2" fill="#0f172a" stroke="none"/></svg>`;
+
+/* =========================================================
+   Pont natif : plugins Capacitor dans l'app iOS, repli web sinon
+   ========================================================= */
+const Native = (() => {
+  const C = window.Capacitor;
+  const isNative = !!(C && typeof C.isNativePlatform === 'function' && C.isNativePlatform());
+  const P = n => (isNative && typeof C.registerPlugin === 'function' ? C.registerPlugin(n) : null);
+  return { isNative, platform: isNative ? C.getPlatform() : 'web', geo: P('Geolocation'), notif: P('LocalNotifications'), haptics: P('Haptics'), share: P('Share'), status: P('StatusBar') };
+})();
 
 /* =========================================================
    État
@@ -127,7 +145,7 @@ const state = {
   lineMeta: Object.fromEntries(LINE_IDS.map(l => [l, { color: CFG.lines[l].color, shapes: null }])),
   user: null, mode: 'gps', lastGps: null, gps: 'search', firstFix: true,
   activeLines: new Set(savedLines.length ? savedLines : LINE_IDS),
-  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
+  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirTouched: false, view: store.get('tbm-view') || 'ui', follow: false, margin: store.get('tbm-margin') ?? 60, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
   recents: store.get('tbm-recents') || [],
   cadence: store.get('tbm-cadence') || 'normal',
   bannerDismissed: { far: false, nogps: false }, bannerKind: null,
@@ -563,7 +581,9 @@ function computeCtx(now) {
   ctx.forced = !!forced;
   ctx.boardW = walkFor(S);
   ctx.groups = groups;
-  let g = state.dir ? ctx.groups.find(x => x.key === state.dir) : null;
+  let g = null;
+  if (!state.dirTouched) { const f = favorites().find(x => x.st === S.id && ctx.groups.some(y => y.key === x.key)); if (f) g = ctx.groups.find(y => y.key === f.key); }
+  if (!g && state.dir) g = ctx.groups.find(x => x.key === state.dir) || null;
   if (!g) for (const x of ctx.groups) if (!g || x.list[0].arrIn < g.list[0].arrIn) g = x;
   ctx.g = g;
   ctx.primary = g ? g.list[0] : null;
@@ -904,7 +924,7 @@ function fitTrip(animate) {
   const pts = [state.user.ll];
   if (lastCtx && lastCtx.board) pts.push(lastCtx.board.ll);
   if (pts.length === 1) { map.setView(pts[0], 16, { animate }); return; }
-  map.flyToBounds(L.latLngBounds(pts), { paddingTopLeft: [24, 64], paddingBottomRight: [24, 40], maxZoom: 17, duration: animate ? .8 : 0 });
+  map.flyToBounds(L.latLngBounds(pts), { paddingTopLeft: [28, 90], paddingBottomRight: [28, 150], maxZoom: 17, duration: animate ? .8 : 0 });
 }
 
 /* =========================================================
@@ -944,6 +964,15 @@ function resumeGps() {
 }
 let watchId = null;
 function startGps() {
+  if (watchId != null) return;
+  if (Native.geo) {
+    state.gps = 'search'; renderGps();
+    Native.geo.watchPosition({ enableHighAccuracy: true, timeout: 20000, maximumAge: 3000 }, (pos, err) => {
+      if (err) onErr({ code: /denied|permission|autoris/i.test(String(err.message || err)) ? 1 : 2 });
+      else if (pos) onPos(pos);
+    }).then(id => { watchId = id; }).catch(() => onErr({ code: 1 }));
+    return;
+  }
   if (!('geolocation' in navigator)) { state.gps = 'error'; renderGps(); showBanner('nogps', 'votre navigateur ne propose pas la géolocalisation'); return; }
   state.gps = 'search'; renderGps();
   watchId = navigator.geolocation.watchPosition(onPos, onErr, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
@@ -959,13 +988,14 @@ function onPos(pos) {
   if (state.bannerKind === 'nogps') hideBanner();
   if (state.mode === 'gps') {
     setUser(ll, acc, 'gps');
+    if (state.follow && state.view === 'map') map.panTo(ll, { animate: true, duration: .6 });
     const far = checkFar(ll);
     if (state.firstFix) { state.firstFix = false; if (!far) state.needFit = true; }
   }
   renderGps();
 }
 function onErr(err) {
-  if (err.code === 1) { state.gps = 'denied'; if (watchId != null) navigator.geolocation.clearWatch(watchId); if (!state.user) showBanner('nogps', 'vous avez refusé l\u2019accès à votre position'); }
+  if (err.code === 1) { state.gps = 'denied'; if (watchId != null) { if (Native.geo) Native.geo.clearWatch({ id: watchId }); else navigator.geolocation.clearWatch(watchId); watchId = null; } if (!state.user) showBanner('nogps', 'vous avez refusé l\u2019accès à votre position'); }
   else if (err.code === 2) { state.gps = state.lastGps ? 'ok' : 'error'; if (!state.user) showBanner('nogps', 'aucun signal de position disponible'); }
   else if (!state.lastGps) { state.gps = 'search'; if (!state.user) showBanner('nogps', 'le signal GPS met du temps à arriver'); }
   renderGps();
@@ -979,12 +1009,12 @@ function checkFar(ll) {
 function renderGps() {
   const b = $('#gps'), txt = $('.txt', b);
   let s = state.gps, label;
-  if (state.mode === 'manual') { s = 'manual'; label = 'Repère manuel'; }
-  else if (state.mode === 'sim') { s = 'sim'; label = 'Position simulée'; }
+  if (state.mode === 'manual') { s = 'manual'; label = 'Manuel'; }
+  else if (state.mode === 'sim') { s = 'sim'; label = 'Simulé'; }
   else if (s === 'ok') label = `GPS ±${Math.round(state.lastGps.acc)} m`;
-  else if (s === 'search') label = 'Recherche GPS…';
+  else if (s === 'search') label = 'GPS…';
   else if (s === 'denied') label = 'GPS refusé';
-  else label = 'GPS indisponible';
+  else label = 'Sans GPS';
   b.dataset.state = s;
   txt.textContent = label;
   b.title = state.mode !== 'gps' ? 'Reprendre le GPS' : label;
@@ -1026,89 +1056,153 @@ function simulate(spot) {
 map.on('click', e => {
   if (Date.now() - lastPopupClose < 400) return;
   setManual([e.latlng.lat, e.latlng.lng], 'manual');
-  toast('Repère placé. Touchez le badge GPS pour reprendre le GPS.');
+  toast('Repère placé. Touchez « Manuel » pour reprendre le GPS.');
 });
 
+
 /* =========================================================
-   Interface : une seule carte fixe, sans défilement
+   Interface (style iOS) : vue Tram plein écran ou vue Carte plein écran
    ========================================================= */
-function sheetVisible() { return 0; }
-function syncCardHeight() { map.invalidateSize(); }
-window.addEventListener('resize', syncCardHeight);
-function setMapBig(big) {
-  document.body.classList.toggle('map-big', big);
-  $('#mapToggle').setAttribute('aria-pressed', String(big));
-  $('#mapToggle').innerHTML = big ? `${svg('x', 16)}Réduire` : `${svg('map', 16)}Suivre à pied`;
-  setTimeout(() => { map.invalidateSize(); fitTrip(true); }, 320);
+const setHTML = (el, html) => { if (el._h !== html) { el.innerHTML = html; el._h = html; return true; } return false; };
+function sheetVisible() { return state.view === 'map' ? 150 : 0; }
+function renderChips() { /* filtres : dans le menu */ }
+
+/* Retour haptique : moteur Taptic via Capacitor, vibration sinon */
+function haptic(kind) {
+  try {
+    if (Native.haptics) {
+      if (kind === 'select') Native.haptics.impact({ style: 'LIGHT' });
+      else Native.haptics.notification({ type: kind === 'green' ? 'SUCCESS' : kind === 'orange' ? 'WARNING' : 'ERROR' });
+    } else if (navigator.vibrate) navigator.vibrate(kind === 'select' ? 8 : kind === 'red' ? [40, 60, 40] : 25);
+  } catch (_) { /* pas de retour haptique disponible */ }
 }
 
-const setHTML = (el, html) => { if (el._h !== html) { el.innerHTML = html; el._h = html; return true; } return false; };
+let toastTimer = null;
+function toast(msg, long) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), long ? 6000 : 2600);
+}
+
+/* ---------- Vues ---------- */
+function setView(v) {
+  state.view = v;
+  store.set('tbm-view', v);
+  document.body.dataset.view = v;
+  $$('#navSeg [data-view]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === v)));
+  haptic('select');
+  if (v === 'map') setTimeout(() => { map.invalidateSize(); fitTrip(false); }, 60);
+  tickUi(true);
+}
+function setFollow(on) {
+  state.follow = on;
+  const b = $('#followBtn');
+  b.setAttribute('aria-pressed', String(on));
+  b.querySelector('.lbl').textContent = on ? 'Suivi actif' : 'Suivre';
+  if (on && state.user) map.flyTo(state.user.ll, Math.max(map.getZoom(), 17), { duration: .6 });
+}
+map.on('dragstart', () => { if (state.follow) setFollow(false); });
+
+/* ---------- Statut temps réel ---------- */
 function renderLive() {
   const b = $('#live'), txt = $('.txt', b);
   const age = state.lastUpdate ? nowS() - state.lastUpdate : null;
   let s, label;
   if (state.api === 'error' && !state.lastUpdate) { s = 'error'; label = state.apiErrorKind === 'offline' ? 'Hors ligne' : 'Erreur'; }
-  else if (!state.lastUpdate) { s = 'loading'; label = 'TBM…'; }
+  else if (!state.lastUpdate) { s = 'loading'; label = '…'; }
   else if (age > 120 || state.api === 'error') { s = 'stale'; label = `${Math.round(age / 60)} min`; }
-  else { s = 'ok'; label = `${Math.max(0, Math.round(age))} s`; }
+  else { s = 'ok'; label = 'Direct'; }
   b.dataset.state = s;
   txt.textContent = label;
-  b.title = s === 'ok' ? `Temps réel TBM mis à jour il y a ${label}` : (state.apiError || 'Connexion au temps réel TBM');
+  b.setAttribute('aria-label', s === 'ok' ? `Temps réel à jour, il y a ${Math.round(age)} secondes` : (state.apiError || 'Connexion au temps réel'));
 }
 $('#live').addEventListener('click', () => {
   if (state.api === 'error' && !state.lastUpdate) openCfg();
-  else { toast('Actualisation du temps réel…'); LINE_IDS.forEach(l => { state.lineFresh[l] = 0; }); }
+  else { toast('Actualisation…'); LINE_IDS.forEach(l => { state.lineFresh[l] = 0; }); }
 });
-function renderCadence() {
-  $('#cadence').innerHTML = CADENCES.map(c => `<button type="button" role="radio" data-cadence="${c.id}" aria-checked="${c.id === state.cadence}"><b>${c.label}</b><small>${c.kmh.toString().replace('.', ',')} km/h</small></button>`).join('');
+
+/* ---------- Favoris (station + direction) ---------- */
+function favorites() { return store.get('tbm-favs') || []; }
+function isFav(st, key) { return favorites().some(f => f.st === st && f.key === key); }
+function toggleFav(ctx) {
+  if (!ctx.board || !ctx.g) return;
+  const favs = favorites(), k = ctx.g.key, st = ctx.board.id;
+  const i = favs.findIndex(f => f.st === st && f.key === k);
+  if (i >= 0) { favs.splice(i, 1); toast('Retiré des favoris'); }
+  else { favs.unshift({ st, key: k, name: ctx.board.name, line: ctx.g.line, dest: ctx.g.dest }); toast('Ajouté aux favoris : présélectionné à cette station'); }
+  store.set('tbm-favs', favs.slice(0, 12));
+  haptic('select');
+  tickUi(true);
 }
-function relevantMessages(lines, stations) {
-  return state.messages.filter(m => m.lines.some(l => lines.includes(l)) || m.stations.some(s => stations.includes(s)));
+
+/* ---------- Directions : flèches gauche / droite ---------- */
+function orderedDirs(ctx) {
+  return (ctx.groups || []).slice().sort((a, b) => a.line.localeCompare(b.line) || a.dest.localeCompare(b.dest, 'fr'));
 }
+function stepDir(delta) {
+  const ctx = lastCtx;
+  const dirs = orderedDirs(ctx || {});
+  if (dirs.length < 2) return;
+  const i = Math.max(0, dirs.findIndex(g => ctx.g && g.key === ctx.g.key));
+  const n = dirs[(i + delta + dirs.length) % dirs.length];
+  state.dir = n.key; state.dirTouched = true;
+  store.set('tbm-dir', n.key);
+  haptic('select');
+  const el = $('#uDirName');
+  if (el) { el.classList.remove('slide-l', 'slide-r'); void el.offsetWidth; el.classList.add(delta > 0 ? 'slide-l' : 'slide-r'); }
+  tickUi(true);
+}
+(() => {
+  const zone = $('#uDir');
+  let sx = null, sy = null;
+  zone.addEventListener('pointerdown', e => { sx = e.clientX; sy = e.clientY; });
+  zone.addEventListener('pointerup', e => {
+    if (sx == null) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    sx = null;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) stepDir(dx < 0 ? 1 : -1);
+  });
+  zone.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') stepDir(-1); else if (e.key === 'ArrowRight') stepDir(1); });
+})();
+
+/* ---------- Rendus ---------- */
 function ringOf(st) {
   const cols = [...st.lines].sort().map(lineColor);
   return cols.length > 1 ? `conic-gradient(${cols.map((c, i) => `${c} ${(i / cols.length * 360).toFixed(1)}deg ${((i + 1) / cols.length * 360).toFixed(1)}deg`).join(',')})` : cols[0];
 }
-
-/* 1. Où je suis */
+function relevantMessages(lines, stations) {
+  return state.messages.filter(m => m.lines.some(l => lines.includes(l)) || m.stations.some(s => stations.includes(s)));
+}
 function renderStation(ctx) {
-  const el = $('#cStation');
-  if (!ctx.board) return setHTML(el, '');
+  const el = $('#uStation');
+  if (!ctx.board) return setHTML(el, `<div class="u-st"><div class="u-st-main"><span class="u-eyebrow">Votre station</span><b>Position inconnue</b></div></div>`);
   const w = ctx.boardW, st = ctx.board;
-  const sub = (ctx.forced ? 'Station choisie' : ctx.skipped ? `Plus proche avec départs` : 'Station la plus proche') + (w ? ` · ${fmtDist(w.dist)}, ${fmtWalk(w.sec)} à pied` : '');
-  const n = state.messages.length;
-  setHTML(el, `<div class="st-row">
-    <span class="stn" style="--ring:${ringOf(st)};--s:26px;--p:5px"><i></i></span>
-    <div class="st-main"><b>${esc(st.name)}</b><small>${sub}</small></div>
-    ${ctx.forced ? '<button type="button" class="chipbtn" data-act="from-clear">La plus proche</button>' : ''}
-    ${n ? `<button type="button" class="chipinfo ${digestUnseen() ? 'new' : ''}" data-act="digest" aria-label="${n} info(s) réseau du jour">${svg('alert', 15)}${n}</button>` : ''}
-    <button type="button" class="icon-btn more" data-act="details" aria-label="Tous les passages">${svg('list', 20)}</button>
+  const eyebrow = ctx.forced ? 'Station choisie' : ctx.skipped ? 'Plus proche avec départs' : 'Station la plus proche';
+  setHTML(el, `<div class="u-st">
+    <span class="stn" style="--ring:${ringOf(st)};--s:30px;--p:6px" aria-hidden="true"><i></i></span>
+    <div class="u-st-main"><span class="u-eyebrow">${eyebrow}</span><b>${esc(st.name)}</b></div>
+    <div class="u-walk">${w ? `<b>${fmtWalk(w.sec)}</b><small>${fmtDist(w.dist)} à pied${w.routed ? '' : ' (estimé)'}</small>` : ''}</div>
+    ${ctx.forced ? '<button type="button" class="u-pill" data-act="from-clear">La plus proche</button>' : ''}
   </div>`);
 }
-
-/* 2. Dans quel sens : tuiles par terminus, avec leur prochain passage et leur couleur de verdict */
-function renderDirs(ctx) {
-  const el = $('#cDirs');
-  if (!ctx.groups || !ctx.groups.length) return setHTML(el, '');
-  const sel = ctx.g && ctx.g.key;
-  let gs = [...ctx.groups].sort((a, b) => a.line.localeCompare(b.line) || a.dest.localeCompare(b.dest, 'fr'));
-  const MAX = 6;
-  let more = 0;
-  if (gs.length > MAX) {
-    const keep = gs.slice(0, MAX - 1);
-    if (sel && !keep.some(g => g.key === sel)) keep[MAX - 2] = gs.find(g => g.key === sel);
-    more = gs.length - keep.length;
-    gs = keep;
-  }
-  setHTML(el, `<div class="dirs-h">Votre direction</div><div class="tiles">${gs.map(g => {
-    const p = g.list[0];
-    return `<button type="button" class="tile ${p.v ? 'v-' + p.v : ''}" role="radio" aria-checked="${g.key === sel}" data-dir="${esc(g.key)}" aria-label="Ligne ${esc(g.line)} vers ${esc(g.dest)}">
-      <span class="tile-top">${badge(g.line, 'sm')}<span class="cd-wrap">${cdSpan(p, 'min')}</span></span>
-      <span class="tile-nm">${esc(g.dest)}</span></button>`;
-  }).join('')}${more ? `<button type="button" class="tile tile-more" data-act="details">+${more} direction${more > 1 ? 's' : ''}</button>` : ''}</div>`);
+function renderDir(ctx) {
+  const el = $('#uDirInner');
+  const dirs = orderedDirs(ctx);
+  if (!dirs.length) { setHTML(el, `<div class="u-dir-empty">Aucune direction desservie dans l\u2019heure</div>`); $('#uDir').dataset.count = '0'; return; }
+  const i = Math.max(0, dirs.findIndex(g => ctx.g && g.key === ctx.g.key));
+  const g = dirs[i], fav = isFav(ctx.board.id, g.key);
+  $('#uDir').dataset.count = String(dirs.length);
+  setHTML(el, `
+    <button type="button" class="u-arrow" data-act="dir-prev" aria-label="Direction précédente" ${dirs.length < 2 ? 'disabled' : ''}>${svg('chevL', 26)}</button>
+    <div class="u-dir-cur" role="group" aria-roledescription="sélecteur" aria-label="Direction ${i + 1} sur ${dirs.length} : ligne ${esc(g.line)} vers ${esc(g.dest)}">
+      <div class="u-dir-top">${badge(g.line)}<span class="u-eyebrow">Direction ${i + 1}/${dirs.length}</span>
+        <button type="button" class="u-fav" data-act="fav" aria-pressed="${fav}" aria-label="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${svg(fav ? 'starFill' : 'star', 20)}</button></div>
+      <div id="uDirName" class="u-dir-name">${esc(g.dest)}</div>
+      <div class="u-dots" aria-hidden="true">${dirs.map((d, k) => `<i class="${k === i ? 'on' : ''}" style="--c:${lineColor(d.line)}"></i>`).join('')}</div>
+    </div>
+    <button type="button" class="u-arrow" data-act="dir-next" aria-label="Direction suivante" ${dirs.length < 2 ? 'disabled' : ''}>${svg('chevR', 26)}</button>`);
 }
-
-/* 3. Est-ce que je l'ai : verdict, compte à rebours, course tram / vous */
 function race(p, now) {
   const walk = p.w ? p.w.sec : null;
   const span = Math.max(p.depIn, walk || 0, 60) * 1.08 + 10;
@@ -1131,56 +1225,154 @@ function whereText(p, now) {
   if (n <= 0) return 'Arrive à la station';
   return pos.dwell ? `À quai à ${stName(c[pos.at].st)}, ${n} arrêt${n > 1 ? 's' : ''} avant` : `${n} arrêt${n > 1 ? 's' : ''} avant votre station`;
 }
+function verdictWords(ctx) {
+  const p = ctx.primary;
+  if (!p || !p.w) return null;
+  const v = p.v;
+  if (v === 'red') {
+    const n = ctx.nextCatch;
+    return { head: 'Trop tard', sub: n ? `Le suivant arrive dans <b>${cdSpan(n, 'min')}</b> : ${n.v === 'green' ? 'celui-là, vous l\u2019avez' : 'jouable en pressant le pas'}.` : 'Aucun tram attrapable parmi les passages annoncés.' };
+  }
+  const slack = p.arrIn - p.w.sec - state.margin;
+  if (v === 'green') return { head: 'Vous l\u2019avez', sub: slack > 60 ? `Partez dans <b>${fmtMS(slack)}</b>.` : '<b>Partez maintenant</b>, sans courir.' };
+  return { head: 'Pressez le pas', sub: `<b>Partez maintenant</b> : au moins ${fmtKmh(p.w.dist / Math.max(1, p.depIn - CFG.walk.platformSec) * 3.6)}.` };
+}
 function simButtons() {
-  return `<div class="acts"><button class="btn" type="button" data-act="sim" data-spot="bourse">${svg('pin', 16)}Place de la Bourse</button><button class="btn ghost" type="button" data-act="sim" data-spot="quinconces">Quinconces</button></div>`;
+  return `<div class="u-acts"><button class="btn" type="button" data-act="sim" data-spot="bourse">${svg('pin', 16)}Place de la Bourse</button><button class="btn ghost" type="button" data-act="sim" data-spot="quinconces">Quinconces</button></div>`;
 }
 function renderVerdict(ctx) {
-  const el = $('#cVerdict');
-  const box = (cls, h, t, extra = '') => setHTML(el, `<div class="vb ${cls}"><div class="vb-head"><strong>${h}</strong></div><div class="vb-sub">${t}</div>${extra}</div>`);
+  const el = $('#uVerdict');
+  const box = (cls, h, t, extra = '') => { el.className = 'u-verdict ' + cls; setHTML(el, `<div class="u-v-head"><strong>${h}</strong></div><div class="u-v-sub">${t}</div>${extra}`); };
   if (state.api === 'error' && !state.journeys.length) {
     const blocked = state.apiErrorKind === 'blocked' || state.apiErrorKind === 'proxy';
-    return box('v-red', 'Temps réel indisponible', `${esc(state.apiError)}.`,
-      `<div class="acts"><button class="btn" type="button" data-act="retry">Réessayer</button>${blocked ? '<button class="btn ghost" type="button" data-act="settings">Configurer un relais</button>' : ''}</div>`);
+    return box('v-red', 'Temps réel indisponible', `${esc(state.apiError)}.`, `<div class="u-acts"><button class="btn" type="button" data-act="retry">Réessayer</button>${blocked ? '<button class="btn ghost" type="button" data-act="settings">Connexion</button>' : ''}</div>`);
   }
-  if (!state.stopsReady || (!state.lastUpdate && state.api === 'loading')) return box('', 'Connexion au temps réel…', 'Chargement des stations et des passages TBM.');
-  if (!ctx.board) return box('', 'Où êtes-vous ?', 'Autorisez la localisation, touchez la carte, ou simulez une position.', simButtons());
+  if (!state.stopsReady || (!state.lastUpdate && state.api === 'loading')) return box('', 'Connexion…', 'Chargement des stations et des passages TBM.');
+  if (!ctx.board) return box('', 'Où êtes-vous ?', 'Autorisez la localisation, placez-vous sur la carte, ou simulez une position.', simButtons());
   const p = ctx.primary;
-  if (!p) return box('', 'Aucun départ dans l\u2019heure', state.journeys.length ? 'Rien d\u2019annoncé à cette station pour les lignes affichées.' : 'Aucun tram annoncé : service probablement terminé.');
-  const now = ctx.now, v = p.v;
-  let head, sub;
-  if (!p.w) { head = 'Où êtes-vous ?'; sub = 'Placez votre repère pour savoir si vous l\u2019aurez.'; }
-  else if (v === 'red') {
-    head = 'Trop tard';
-    const n = ctx.nextCatch;
-    sub = n ? `Le suivant arrive dans <b>${cdSpan(n, 'min')}</b> : ${n.v === 'green' ? 'celui-là, vous l\u2019aurez' : 'jouable en pressant le pas'}.` : 'Aucun tram attrapable parmi les passages annoncés.';
-  } else {
-    head = v === 'green' ? 'Vous l\u2019avez' : 'Pressez le pas !';
-    const slack = p.arrIn - p.w.sec - 30;
-    sub = slack > 60 ? `Vous pouvez partir dans <b>${fmtMS(slack)}</b>.` : v === 'green' ? '<b>Partez maintenant</b>, tranquillement.' : `<b>Partez maintenant</b>, au moins ${fmtKmh(p.w.dist / Math.max(1, p.depIn - CFG.walk.platformSec) * 3.6)}.`;
-  }
-  const impact = relevantMessages([p.line], [p.S.id]);
+  if (!p) return box('', 'Pas de départ', state.journeys.length ? 'Rien d\u2019annoncé dans l\u2019heure à cette station.' : 'Aucun tram annoncé : service probablement terminé.');
+  const now = ctx.now, vw = verdictWords(ctx);
+  el.className = 'u-verdict ' + (p.v ? 'v-' + p.v : '');
+  const next = ctx.g.list.slice(1, 3);
   const delay = p.delay != null && Math.abs(p.delay) >= 60 ? `<span class="delay">${p.delay > 0 ? 'retard +' : 'avance '}${Math.abs(Math.round(p.delay / 60))} min</span>` : '';
-  setHTML(el, `<div class="vb ${v ? 'v-' + v : ''}">
-    <div class="vb-head">
-      <strong>${head}</strong>
-      <div class="vb-cd">${cdSpan(p)}<small>${p.arrIn > 0 ? 'avant l\u2019arrivée' : 'repart ' + fmtClockS(p.tDep)}</small></div>
+  setHTML(el, `
+    <div class="u-v-head">
+      <strong>${vw ? vw.head : 'Placez-vous'}</strong>
+      <div class="u-cd">${cdSpan(p)}<small>${p.arrIn > 0 ? 'avant l\u2019arrivée' : 'repart ' + fmtClockS(p.tDep)}</small></div>
     </div>
-    <div class="vb-sub">${sub}</div>
+    <div class="u-v-sub">${vw ? vw.sub : 'Placez votre repère pour savoir si vous l\u2019aurez.'}</div>
     ${race(p, now)}
-    <div class="vb-foot"><span>${esc(whereText(p, now))}</span>${delay}${p.live ? '<span class="rt">temps réel</span>' : '<span class="rt theo">théorique</span>'}</div>
-    ${impact.length ? `<button type="button" class="impact" data-act="details">${svg('alert', 16)}<span>${esc((impact[0].title || impact[0].body).slice(0, 110))}</span></button>` : ''}
-  </div>`);
+    <div class="u-v-foot"><span>${esc(whereText(p, now))}</span>${delay}${p.live ? '<span class="rt">temps réel</span>' : '<span class="rt theo">théorique</span>'}
+      ${next.length ? `<span class="u-next">puis ${next.map(n => cdSpan(n, 'min')).join(', ')}</span>` : ''}</div>`);
+  const sum = vw ? `${vw.head}. Tram ${p.line} vers ${p.dest}, ${p.arrIn > 0 ? 'dans ' + Math.max(1, Math.round(p.arrIn / 60)) + ' minutes' : 'à quai'}.` : '';
+  const sr = $('#srVerdict');
+  if (sr.textContent !== sum) sr.textContent = sum;
 }
-
-/* 4. Allure réglée, remplacée par votre vitesse réelle dès que vous marchez */
-function renderSpeed() {
-  const el = $('#cSpeed');
+function renderAlert(ctx) {
+  const el = $('#uAlert');
+  const p = ctx.primary;
+  const impact = p ? relevantMessages([p.line], [p.S.id]) : ctx.board ? relevantMessages([...ctx.board.lines], [ctx.board.id]) : [];
+  if (!impact.length) return setHTML(el, '');
+  setHTML(el, `<button type="button" class="u-impact" data-act="digest">${svg('alert', 18)}<span><b>Perturbation en cours</b>${esc((impact[0].title || impact[0].body).slice(0, 90))}</span>${svg('chevR', 18)}</button>`);
+}
+function renderBottom(ctx) {
   const preset = CADENCES.find(c => c.id === state.cadence) || CADENCES[1];
-  if (state.realKmh) setHTML(el, `<span class="spd on"><i></i>Calculé sur votre vitesse réelle : <b>${fmtKmh(state.realKmh)}</b></span>`);
-  else setHTML(el, `<span class="spd"><i></i>Calculé sur l\u2019allure ${preset.label.toLowerCase()} (${fmtKmh(preset.kmh)})${state.mode === 'gps' ? ', vitesse réelle dès que vous marchez' : ''}</span>`);
+  setHTML($('#uSpeed'), state.realKmh
+    ? `<span class="spd on"><i></i>Votre vitesse réelle : <b>${fmtKmh(state.realKmh)}</b></span>`
+    : `<span class="spd"><i></i>Allure « ${preset.label} »${state.mode === 'gps' ? ', vitesse réelle dès que vous marchez' : ''}</span>`);
+  const p = ctx.primary, a = state.alert;
+  const alertLbl = a ? `Alerte ${fmtClock(a.leaveAt)}` : 'Me prévenir';
+  setHTML($('#uActions'), `
+    <button type="button" class="u-act ${a ? 'on' : ''}" data-act="alert" ${!p || !p.w ? 'disabled' : ''} aria-pressed="${!!a}">${svg(a ? 'bellOn' : 'bell', 20)}<span>${alertLbl}</span></button>
+    <button type="button" class="u-act" data-act="maps" ${!ctx.board ? 'disabled' : ''}>${svg('walk', 20)}<span>Plans</span></button>
+    <button type="button" class="u-act" data-act="share" ${!p ? 'disabled' : ''}>${svg('share', 20)}<span>Partager</span></button>`);
+}
+function renderMini(ctx) {
+  const el = $('#mini');
+  const p = ctx.primary, vw = verdictWords(ctx);
+  el.className = 'mini ' + (p && p.v ? 'v-' + p.v : '');
+  if (!p) return setHTML(el, `<span class="mini-t">${ctx.board ? esc(ctx.board.name) + ' : pas de départ' : 'Où êtes-vous ?'}</span>`);
+  setHTML(el, `${badge(p.line)}<span class="mini-main"><b>${vw ? vw.head : 'Placez-vous'}</b><small>vers ${esc(p.dest)}, ${esc(p.S.name)}</small></span><span class="mini-cd">${cdSpan(p)}</span>`);
 }
 
-/* Infos réseau du jour : affichées une fois par jour, puis sur demande */
+/* ---------- Alerte de départ (notification locale, mise à jour en temps réel) ---------- */
+const ALERT_ID = 4201;
+async function askNotifPermission() {
+  try {
+    if (Native.notif) { const r = await Native.notif.requestPermissions(); return r.display === 'granted'; }
+    if ('Notification' in window) { if (Notification.permission === 'granted') return true; return (await Notification.requestPermission()) === 'granted'; }
+  } catch (_) { /* refus ou indisponible */ }
+  return false;
+}
+async function scheduleNative(a) {
+  if (!Native.notif) return;
+  try {
+    await Native.notif.cancel({ notifications: [{ id: ALERT_ID }] });
+    await Native.notif.schedule({ notifications: [{ id: ALERT_ID, title: `Partez maintenant : tram ${a.line}`, body: `Vers ${a.dest}, à quai à ${a.stName} vers ${fmtClock(a.arr)}.`, schedule: { at: toDate(a.leaveAt), allowWhileIdle: true } }] });
+    a.scheduledAt = a.leaveAt;
+  } catch (_) { /* notifications refusées */ }
+}
+async function toggleAlert() {
+  if (state.alert) { cancelAlert('Alerte annulée'); return; }
+  const p = lastCtx && lastCtx.primary;
+  if (!p || !p.w) return;
+  const target = p.v === 'red' && lastCtx.nextCatch ? lastCtx.nextCatch : p;
+  const leaveAt = target.tArr - target.w.sec - state.margin;
+  if (leaveAt - nowS() < 20) { haptic(target.v || 'orange'); toast('Partez maintenant !'); return; }
+  const granted = await askNotifPermission();
+  state.alert = { jid: target.j.id, st: target.S.id, stName: target.S.name, line: target.line, dest: target.dest, arr: target.tArr, leaveAt, scheduledAt: null, granted };
+  await scheduleNative(state.alert);
+  haptic('green');
+  toast(`Alerte à ${fmtClock(leaveAt)} pour le tram de ${fmtClock(target.tArr)}${granted ? '' : ' (dans l\u2019app : notifications refusées)'}`, true);
+  tickUi(true);
+}
+function cancelAlert(msg) {
+  if (Native.notif) Native.notif.cancel({ notifications: [{ id: ALERT_ID }] }).catch(() => {});
+  state.alert = null;
+  if (msg) toast(msg);
+  tickUi(true);
+}
+function checkAlert() {
+  const a = state.alert;
+  if (!a) return;
+  const j = state.journeyById.get(a.jid), st = state.stations[a.st];
+  const i = j ? j.callIdx[a.st] : null;
+  if (!j || i == null || !st) { if (nowS() > a.arr + 60) cancelAlert(); return; }
+  const w = walkFor(st);
+  a.arr = j.calls[i].arr;
+  if (w) a.leaveAt = a.arr - w.sec - state.margin;
+  if (Native.notif && a.scheduledAt != null && Math.abs(a.leaveAt - a.scheduledAt) > 20 && a.leaveAt > nowS() + 5) scheduleNative(a);
+  if (nowS() >= a.leaveAt) {
+    haptic('orange');
+    toast(`Partez maintenant : tram ${a.line} vers ${a.dest}, à quai à ${fmtClock(a.arr)}`, true);
+    if (!Native.notif && a.granted && document.hidden && 'Notification' in window) {
+      try { new Notification(`Partez maintenant : tram ${a.line}`, { body: `Vers ${a.dest}, à quai à ${a.stName} vers ${fmtClock(a.arr)}.`, tag: 'tbm-alert' }); } catch (_) { /* navigateur sans notifications */ }
+    }
+    state.alert = null;
+  }
+}
+setInterval(checkAlert, 3000);
+
+/* ---------- Partager, Plans ---------- */
+async function shareTrip() {
+  const p = lastCtx && lastCtx.primary;
+  if (!p) return;
+  const text = `Je prends le tram ${p.line} vers ${p.dest} à ${p.S.name}, à quai vers ${fmtClock(p.tArr)}.`;
+  try {
+    if (Native.share) await Native.share.share({ title: 'Mon tram', text });
+    else if (navigator.share) await navigator.share({ title: 'Mon tram', text });
+    else { await navigator.clipboard.writeText(text); toast('Copié dans le presse-papiers'); }
+  } catch (_) { /* partage annulé */ }
+}
+function openMaps() {
+  const st = lastCtx && lastCtx.board;
+  if (!st) return;
+  const q = `daddr=${st.ll[0].toFixed(6)},${st.ll[1].toFixed(6)}&dirflg=w`;
+  const url = Native.platform === 'ios' ? `maps://?${q}` : `https://maps.apple.com/?${q}`;
+  window.open(url, '_blank');
+}
+
+/* ---------- Infos réseau du jour ---------- */
 const today = () => new Date().toISOString().slice(0, 10);
 const msgKey = m => norm(m.body).slice(0, 60);
 function digestUnseen() {
@@ -1188,60 +1380,86 @@ function digestUnseen() {
   const keys = seen.day === today() ? seen.keys || [] : [];
   return state.messages.some(m => !keys.includes(msgKey(m)));
 }
-function openDigest() {
-  const d = $('#digest');
-  const mine = lastCtx && lastCtx.board ? [...lastCtx.board.lines] : [];
-  const list = state.messages.map(m => ({ m, me: m.lines.some(l => mine.includes(l)) })).sort((a, b) => b.me - a.me);
-  $('#digestBody').innerHTML = list.length ? list.map(({ m, me }) => `<div class="msg ${me ? 'mine' : ''}"><div class="msg-h">${m.lines.map(l => badge(l, 'sm')).join('')}</div>
+function msgHTML(list) {
+  return list.length ? list.map(({ m, me }) => `<div class="msg ${me ? 'mine' : ''}"><div class="msg-h">${m.lines.map(l => badge(l, 'sm')).join('')}</div>
       <div class="msg-t">${esc(m.title || m.body.slice(0, 90))}</div>${m.title || m.body.length > 90 ? `<div class="msg-b">${esc(m.body)}</div>` : ''}
       ${m.until ? `<div class="msg-v">Jusqu'au ${toDate(m.until).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>` : ''}</div>`).join('')
     : '<p class="muted">Aucune information particulière sur le tram aujourd\u2019hui.</p>';
+}
+function openDigest() {
+  const mine = lastCtx && lastCtx.board ? [...lastCtx.board.lines] : [];
+  const list = state.messages.map(m => ({ m, me: m.lines.some(l => mine.includes(l)) })).sort((a, b) => b.me - a.me);
+  $('#digestBody').innerHTML = msgHTML(list);
   store.set('tbm-digest', { day: today(), keys: state.messages.map(msgKey) });
-  if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
-  tickUi(true);
+  openSheet('#digest');
 }
 function maybeDailyDigest() {
-  if (!state.msgFresh || state.msgError || !state.messages.length) return;
+  if (!state.msgFresh || state.msgError || !state.messages.length || !store.get('tbm-onb')) return;
   const seen = store.get('tbm-digest') || {};
-  if (seen.day === today()) return;
-  if ($('#details').open || $('#cfg').open) return;
+  if (seen.day === today() || $$('dialog[open]').length) return;
   openDigest();
 }
 
-/* Détails (hors de l'écran principal) : tous les passages, infos trafic, lignes, réglages */
-function renderDetails(ctx) {
-  const dlg = $('#details');
-  if (!dlg.open) return;
-  const el = $('#ddBody');
+/* ---------- Menu (feuille iOS) ---------- */
+function openSheet(sel) { const d = $(sel); if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', ''); tickUi(true); }
+$$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
+function renderMenu(ctx) {
+  if (!$('#menu').open) return;
+  const favs = favorites();
   let h = '';
   if (ctx.board) {
-    h += `<h3>Passages à ${esc(ctx.board.name)}</h3>`;
-    h += ctx.groups && ctx.groups.length ? `<div class="deps">${ctx.groups.map(g => `<button type="button" class="dep${ctx.g && ctx.g.key === g.key ? ' pinned' : ''}" data-dir="${esc(g.key)}">
-        ${badge(g.line)}<span class="dep-dir">${esc(g.dest)}<small>${g.list[0].live ? 'temps réel' : 'théorique'}</small></span>
-        <span class="dep-times">${g.list.map(p => `<span class="t ${p.v ? 'v-' + p.v : ''}">${cdSpan(p, 'min')}</span>`).join('')}</span></button>`).join('')}</div>`
-      : '<p class="muted">Aucun départ annoncé dans l\u2019heure.</p>';
+    h += `<h3>Passages à ${esc(ctx.board.name)}</h3><div class="group">`;
+    h += ctx.groups && ctx.groups.length ? ctx.groups.map(g => `<button type="button" class="row" data-pick="${esc(g.key)}">
+        ${badge(g.line, 'sm')}<span class="row-t">${esc(g.dest)}</span>
+        <span class="row-times">${g.list.map(p => `<span class="t ${p.v ? 'v-' + p.v : ''}">${cdSpan(p, 'min')}</span>`).join('')}</span></button>`).join('')
+      : '<div class="row"><span class="row-t muted">Aucun départ annoncé dans l\u2019heure</span></div>';
+    h += '</div>';
   }
-  const mine = ctx.board ? [...ctx.board.lines] : [];
-  const msgs = state.messages.map(m => ({ m, me: m.lines.some(l => mine.includes(l)) || (ctx.board && m.stations.includes(ctx.board.id)) })).sort((a, b) => b.me - a.me);
-  h += `<h3>Infos trafic tram</h3>`;
-  if (state.msgError && !msgs.length) h += `<p class="muted">Indisponibles : ${esc(state.msgError)}.</p>`;
-  else if (!msgs.length) h += '<p class="muted">Aucune perturbation signalée.</p>';
-  else h += msgs.slice(0, 12).map(({ m, me }) => `<div class="msg ${me ? 'mine' : ''}"><div class="msg-h">${m.lines.map(l => badge(l, 'sm')).join('')}</div>
-      <div class="msg-t">${esc(m.title || m.body.slice(0, 90))}</div>${m.title || m.body.length > 90 ? `<div class="msg-b">${esc(m.body)}</div>` : ''}
-      ${m.until ? `<div class="msg-v">Jusqu'au ${toDate(m.until).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>` : ''}</div>`).join('');
-  h += `<h3>Lignes affichées</h3><div class="chips wrap">${LINE_IDS.map(l => `<button type="button" class="chip" data-line="${l}" style="--c:${lineColor(l)}" aria-pressed="${state.activeLines.has(l)}">${l}</button>`).join('')}</div>`;
-  h += `<p class="muted small">Vert : sur le quai plus de 2 min avant le tram. Orange : à une minute près. Rouge : il sera reparti. Horaires temps réel TBM calés sur l'horloge du serveur ; marche selon l'itinéraire piéton réel, plus 20 s pour rejoindre le quai.</p>
-    <div class="acts-line"><button type="button" class="btn ghost" data-act="settings">Connexion</button><button type="button" class="btn ghost" data-act="check-update">Mises à jour</button></div>
-    <p class="muted small">TBM Tram Radar ${state.version ? 'v' + esc(state.version.version) + (state.version.build && state.version.build !== '__BUILD__' ? ' (' + esc(String(state.version.build).slice(0, 7)) + ')' : '') : ''}</p>`;
-  setHTML(el, h);
-}
-function openDetails() {
-  const d = $('#details');
-  if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
-  tickUi(true);
+  h += `<h3>Favoris</h3><div class="group">${favs.length ? favs.map((f, k) => `<button type="button" class="row" data-fav="${k}">${badge(f.line, 'sm')}<span class="row-t">${esc(f.name)}<small>vers ${esc(f.dest)}</small></span>${svg('chevR', 16)}</button>`).join('')
+    : '<div class="row"><span class="row-t muted">Touchez l\u2019étoile d\u2019une direction pour la présélectionner à cette station.</span></div>'}</div>`;
+  h += `<h3>Réseau</h3><div class="group">
+    <button type="button" class="row" data-act="digest">${svg('alert', 18)}<span class="row-t">Infos réseau du jour</span><span class="row-v">${state.messages.length}</span>${svg('chevR', 16)}</button>
+    <div class="row"><span class="row-t">Lignes affichées</span></div>
+    <div class="row chips-row">${LINE_IDS.map(l => `<button type="button" class="chip" data-line="${l}" style="--c:${lineColor(l)}" aria-pressed="${state.activeLines.has(l)}">${l}</button>`).join('')}</div></div>`;
+  h += `<h3>Réglages</h3><div class="group">
+    <div class="row"><span class="row-t">Marge avant l\u2019arrivée du tram<small>Pour « Partez dans… » et l\u2019alerte</small></span></div>
+    <div class="row"><div class="seg seg-sm full" role="radiogroup">${[30, 60, 120].map(m => `<button type="button" role="radio" data-margin="${m}" aria-checked="${state.margin === m}"><b>${m < 60 ? m + ' s' : m / 60 + ' min'}</b></button>`).join('')}</div></div>
+    <button type="button" class="row" data-act="settings"><span class="row-t">Connexion au temps réel</span>${svg('chevR', 16)}</button>
+    <button type="button" class="row" data-act="check-update"><span class="row-t">Rechercher une mise à jour</span></button></div>`;
+  h += `<h3>À propos</h3><div class="group">
+    <a class="row" href="privacy.html" target="_blank" rel="noopener"><span class="row-t">Confidentialité</span>${svg('chevR', 16)}</a>
+    <button type="button" class="row" data-act="onboarding"><span class="row-t">Revoir la présentation</span></button>
+    ${CFG.support ? `<a class="row" href="${esc(CFG.support)}"><span class="row-t">Contact et assistance</span>${svg('chevR', 16)}</a>` : ''}
+    <div class="row"><span class="row-t muted">Tram Radar ${state.version ? 'v' + esc(state.version.version) : ''}. Horaires : TBM, Bordeaux Métropole (Licence Ouverte). Carte : © OpenStreetMap. Itinéraires : OSRM. Application indépendante, non affiliée à TBM.</span></div></div>`;
+  setHTML($('#menuBody'), h);
 }
 
-let lastUi = 0, lastBoardId = null;
+/* ---------- Présentation au premier lancement ---------- */
+const ONB = [
+  { icon: 'tram', t: 'Attrapez votre tram', d: 'Tram Radar trouve la station la plus proche et vous dit, en temps réel, si vous aurez le prochain tram dans votre direction.', a: [['next', 'Continuer']] },
+  { icon: 'locate', t: 'Votre position', d: 'Elle sert à trouver votre station et à calculer votre trajet à pied. Elle reste sur votre appareil : seul le calcul d\u2019itinéraire piéton l\u2019envoie, sans compte ni historique.', a: [['loc', 'Autoriser la localisation'], ['next', 'Plus tard', 'ghost']] },
+  { icon: 'bell', t: 'Alerte de départ', d: 'Touchez « Me prévenir » : l\u2019app vous notifie au moment de partir, recalculé en direct si le tram prend du retard.', a: [['notif', 'Activer les notifications'], ['done', 'Plus tard', 'ghost']] }
+];
+let onbStep = 0;
+function renderOnb() {
+  const s = ONB[onbStep];
+  $('#onbBody').innerHTML = `<div class="onb-ico">${svg(s.icon, 44)}</div><h2>${s.t}</h2><p>${s.d}</p>
+    <div class="onb-dots">${ONB.map((_, k) => `<i class="${k === onbStep ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="onb-acts">${s.a.map(([k, l, c]) => `<button type="button" class="btn big ${c || ''}" data-onb="${k}">${l}</button>`).join('')}</div>`;
+}
+function showOnb() { onbStep = 0; renderOnb(); $('#onb').classList.remove('hidden'); }
+function finishOnb() { store.set('tbm-onb', 1); $('#onb').classList.add('hidden'); tickUi(true); }
+$('#onb').addEventListener('click', async e => {
+  const b = e.target.closest('[data-onb]'); if (!b) return;
+  const k = b.dataset.onb;
+  if (k === 'loc') { startGps(); onbStep++; renderOnb(); }
+  else if (k === 'notif') { await askNotifPermission(); finishOnb(); }
+  else if (k === 'done') finishOnb();
+  else { onbStep++; renderOnb(); }
+});
+
+/* ---------- Boucle d'affichage ---------- */
+let lastUi = 0, lastBoardId = null, lastVerdict = null;
 function tickUi(force) {
   const now = nowS();
   if (!force && now - lastUi < 1) return;
@@ -1250,15 +1468,20 @@ function tickUi(force) {
   state.kmhNow = state.realKmh || kmhOf(state.cadence);
   const ctx = computeCtx(now);
   lastCtx = ctx;
-  if (ctx.board && lastBoardId && ctx.board.id !== lastBoardId && !ctx.forced) toast(`Station la plus proche : ${ctx.board.name}`);
+  if (ctx.board && lastBoardId && ctx.board.id !== lastBoardId && !ctx.forced) { toast(`Station la plus proche : ${ctx.board.name}`); state.dirTouched = false; }
   lastBoardId = ctx.board ? ctx.board.id : null;
+  const pv = ctx.primary && ctx.primary.v ? { j: ctx.primary.j.id, v: ctx.primary.v } : null;
+  if (pv && lastVerdict && pv.j === lastVerdict.j && pv.v !== lastVerdict.v) haptic(pv.v);
+  lastVerdict = pv;
   setRoles(ctx.board ? ctx.board.id : null, null);
-  renderStation(ctx); renderDirs(ctx); renderVerdict(ctx); renderSpeed(); renderDetails(ctx); maybeDailyDigest();
+  renderStation(ctx); renderDir(ctx); renderVerdict(ctx); renderAlert(ctx); renderBottom(ctx); renderMini(ctx); renderMenu(ctx);
   updateTripLayers(ctx);
   refreshPopup();
   renderLive();
   tickCountdowns();
-  if (state.needFit && ctx.board) { state.needFit = false; fitTrip(true); }
+  maybeDailyDigest();
+  $('#menuBtn').classList.toggle('has-new', digestUnseen());
+  if (state.needFit && ctx.board && state.view === 'map') { state.needFit = false; fitTrip(true); }
   if (state.user) {
     const c = candidateStations().slice(0, 4);
     if (state.fromId && state.stations[state.fromId]) c.unshift(state.stations[state.fromId]);
@@ -1267,22 +1490,29 @@ function tickUi(force) {
   }
 }
 
-/* Actions */
+/* ---------- Actions ---------- */
 function onAction(e) {
   const act = e.target.closest('[data-act]');
   if (act) {
     const a = act.dataset.act, id = act.dataset.id;
     if (a === 'sim') simulate(act.dataset.spot);
     else if (a === 'banner-close') { if (state.bannerKind) state.bannerDismissed[state.bannerKind] = true; hideBanner(); }
-    else if (a === 'from') { state.fromId = id; map.closePopup(); state.needFit = true; tickUi(true); }
-    else if (a === 'from-clear') { state.fromId = null; state.needFit = true; tickUi(true); }
-    else if (a === 'details') openDetails();
-    else if (a === 'details-close') $('#details').close();
-    else if (a === 'digest') openDigest();
-    else if (a === 'digest-close') $('#digest').close();
-    else if (a === 'map-toggle') setMapBig(!document.body.classList.contains('map-big'));
+    else if (a === 'from') { state.fromId = id; state.dirTouched = false; map.closePopup(); tickUi(true); }
+    else if (a === 'from-clear') { state.fromId = null; state.dirTouched = false; tickUi(true); }
+    else if (a === 'dir-prev') stepDir(-1);
+    else if (a === 'dir-next') stepDir(1);
+    else if (a === 'fav') toggleFav(lastCtx);
+    else if (a === 'alert') toggleAlert();
+    else if (a === 'maps') openMaps();
+    else if (a === 'share') shareTrip();
+    else if (a === 'menu') openSheet('#menu');
+    else if (a === 'close') act.closest('dialog').close();
+    else if (a === 'digest') { if ($('#menu').open) $('#menu').close(); openDigest(); }
+    else if (a === 'follow') setFollow(!state.follow);
+    else if (a === 'view-ui') setView('ui');
+    else if (a === 'onboarding') { $('#menu').close(); showOnb(); }
     else if (a === 'retry') { toast('Nouvelle tentative…'); boot(true); }
-    else if (a === 'settings') { if ($('#details').open) $('#details').close(); openCfg(); }
+    else if (a === 'settings') { $$('dialog[open]').forEach(d => d.close()); openCfg(); }
     else if (a === 'cfg-close') $('#cfg').close();
     else if (a === 'cfg-save') saveCfg($('#proxyInput').value.trim());
     else if (a === 'cfg-clear') { $('#proxyInput').value = ''; saveCfg(''); }
@@ -1291,14 +1521,18 @@ function onAction(e) {
     e.stopPropagation();
     return;
   }
-  const dir = e.target.closest('[data-dir]');
-  if (dir) {
-    state.dir = dir.dataset.dir;
-    store.set('tbm-dir', state.dir);
-    if ($('#details').open && dir.classList.contains('dep')) $('#details').close();
-    tickUi(true);
+  const v = e.target.closest('#navSeg [data-view]');
+  if (v) { setView(v.dataset.view); return; }
+  const pick = e.target.closest('[data-pick]');
+  if (pick) { state.dir = pick.dataset.pick; state.dirTouched = true; store.set('tbm-dir', state.dir); $('#menu').close(); tickUi(true); return; }
+  const fav = e.target.closest('[data-fav]');
+  if (fav) {
+    const f = favorites()[+fav.dataset.fav];
+    if (f && state.stations[f.st]) { state.fromId = f.st; state.dir = f.key; state.dirTouched = true; $('#menu').close(); tickUi(true); }
     return;
   }
+  const m = e.target.closest('[data-margin]');
+  if (m) { state.margin = +m.dataset.margin; store.set('tbm-margin', state.margin); tickUi(true); return; }
   const line = e.target.closest('[data-line]');
   if (line) {
     const l = line.dataset.line;
@@ -1309,17 +1543,20 @@ function onAction(e) {
   }
 }
 document.addEventListener('click', onAction);
-$('#details').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
-$('#digest').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#cadence').addEventListener('click', e => {
   const b = e.target.closest('[data-cadence]'); if (!b) return;
   state.cadence = b.dataset.cadence;
   store.set('tbm-cadence', state.cadence);
   $$('#cadence [data-cadence]').forEach(x => x.setAttribute('aria-checked', String(x.dataset.cadence === state.cadence)));
+  haptic('select');
   tickUi(true);
 });
+function renderCadence() {
+  $('#cadence').innerHTML = CADENCES.map(c => `<button type="button" role="radio" data-cadence="${c.id}" aria-checked="${c.id === state.cadence}"><b>${c.label}</b><small>${c.kmh.toString().replace('.', ',')} km/h</small></button>`).join('');
+}
+$('#recenter').addEventListener('click', () => { if (state.user) fitTrip(true); else toast('Position inconnue : touchez la carte pour vous placer.'); });
 
-/* Réglages */
+
 const WORKER_CODE = `export default {
   async fetch(request) {
     const target = new URL(request.url).searchParams.get('url');
@@ -1352,17 +1589,6 @@ async function saveCfg(value) {
   catch (err) { status.style.color = 'var(--late)'; status.textContent = `Échec : ${err.message}.`; }
 }
 
-let toastTimer = null;
-function toast(msg) {
-  const t = $('#toast');
-  t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
-}
-$('#recenter').addEventListener('click', () => {
-  if (state.user) fitTrip(true);
-  else toast('Position inconnue : touchez la carte pour placer votre repère.');
-});
 
 /* =========================================================
    Mises à jour automatiques (service worker + version.json)
@@ -1408,6 +1634,7 @@ async function initUpdates() {
   setInterval(() => checkVersion(false), 10 * 60 * 1000);
 }
 
+
 /* =========================================================
    Démarrage
    ========================================================= */
@@ -1419,20 +1646,21 @@ async function boot(force) {
   await refreshLines(LINE_IDS.filter(l => state.activeLines.has(l) && now - (state.lineFresh[l] || 0) >= 5));
   refreshMessages();
 }
-function renderChips() { /* filtres de lignes : rendus dans le panneau Détails */ }
 
-$$('[data-icon]').forEach(el => { el.innerHTML = svg(el.dataset.icon, el.classList.contains('fab') ? 22 : 18); });
+$$('[data-icon]').forEach(el => { el.innerHTML = svg(el.dataset.icon, +(el.dataset.size || 20)); });
 $$('[data-logo]').forEach(el => { el.innerHTML = LOGO; });
+document.body.dataset.view = state.view;
+document.body.classList.toggle('native', Native.isNative);
+$$('#navSeg [data-view]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === state.view)));
+if (Native.status) Native.status.setStyle({ style: 'DARK' }).catch(() => {});
 renderCadence();
 applyZoomClasses();
-syncCardHeight();
 renderGps();
-startGps();
+if (store.get('tbm-onb')) startGps(); else showOnb();
 loadNetwork();
 boot(false);
 schedule();
 initUpdates();
-setTimeout(() => { if (!state.user) toast('Astuce : touchez la carte pour placer votre repère.'); }, 8000);
 
 let lastTick = 0;
 function frame(t) {
@@ -1448,4 +1676,5 @@ document.addEventListener('visibilitychange', () => {
   checkVersion(false);
 });
 window.addEventListener('online', () => { LINE_IDS.forEach(l => { state.lineFresh[l] = 0; }); });
+window.addEventListener('resize', () => map.invalidateSize());
 })();

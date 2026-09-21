@@ -3,12 +3,16 @@
 Web app mobile, un seul écran : la station la plus proche, le sens choisi (terminus), et en temps réel
 « est-ce que je l'ai ? » selon votre allure. Temps réel officiel TBM, itinéraire piéton réel.
 
+## App iOS (App Store)
+
+Voir **APPSTORE.md** : règle 4.2, confidentialité, construction avec Capacitor et Xcode.
+
 ## Mise en ligne sur GitHub Pages (5 minutes)
 
 1. Créez un dépôt GitHub (public, ou privé avec un compte qui autorise Pages).
 2. Envoyez le contenu de ce dossier sur la branche `main` :
    ```bash
-   git init && git add . && git commit -m "TBM Tram Radar 4.0.0"
+   git init && git add . && git commit -m "Tram Radar 5.0.0"
    git branch -M main
    git remote add origin https://github.com/VOTRE-COMPTE/tbm-tram-radar.git
    git push -u origin main

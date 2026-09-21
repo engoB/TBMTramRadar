@@ -1,0 +1,16 @@
+{
+  "appId": "fr.tramradar.bordeaux",
+  "appName": "Tram Radar",
+  "webDir": "www",
+  "backgroundColor": "#f2f2f7",
+  "ios": {
+    "contentInset": "never",
+    "scheme": "TramRadar",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true },
+    "SplashScreen": { "launchShowDuration": 600, "backgroundColor": "#ffffff", "showSpinner": false },
+    "LocalNotifications": { "iconColor": "#0f172a" }
+  }
+}

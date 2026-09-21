@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#ffffff">
 <meta name="description" content="Savoir en temps réel si vous aurez votre tram TBM à Bordeaux, selon votre allure de marche.">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Tram Radar">
 <meta name="app-build" content="__BUILD__">
@@ -13,35 +15,42 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
-<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="assets/app.css?v=__BUILD__">
 </head>
 <body>
 
 <div id="app">
-  <section id="mapWrap" aria-label="Carte">
+  <header id="nav">
+    <button id="live" class="live" type="button" data-state="loading"><span class="dot"></span><span class="txt">…</span></button>
+    <div id="navSeg" class="seg nav-seg" role="tablist" aria-label="Vue">
+      <button type="button" role="tab" data-view="ui" aria-selected="true">Tram</button>
+      <button type="button" role="tab" data-view="map" aria-selected="false">Carte</button>
+    </div>
+    <button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button>
+    <button id="menuBtn" type="button" class="navbtn" data-act="menu" aria-label="Menu" data-icon="more" data-size="24"></button>
+  </header>
+
+  <section id="mapWrap" aria-label="Carte et suivi du trajet">
     <div id="map" role="application" aria-label="Carte du tramway de Bordeaux"></div>
-    <header id="topbar">
-      <span class="brandpill" data-logo title="TBM Tram Radar Bordeaux"></span>
-      <button id="live" class="live" type="button" data-state="loading"><span class="dot"></span><span class="txt">TBM…</span></button>
-      <button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button>
-      <button id="recenter" type="button" class="fab" aria-label="Recentrer sur moi et ma station" title="Recentrer" data-icon="locate"></button>
-    </header>
-    <button id="mapToggle" type="button" class="maptoggle" data-act="map-toggle" aria-pressed="false">Suivre à pied</button>
+    <div class="map-tools">
+      <button id="followBtn" type="button" class="maptool" data-act="follow" aria-pressed="false"><span data-icon="walk" data-size="18"></span><span class="lbl">Suivre</span></button>
+      <button id="recenter" type="button" class="maptool icon" aria-label="Recentrer sur moi et ma station" data-icon="locate" data-size="20"></button>
+    </div>
+    <button id="mini" type="button" class="mini" data-act="view-ui" aria-label="Revenir à la vue Tram"></button>
   </section>
 
-  <main id="card" aria-label="Votre tram">
-    <div id="cStation"></div>
-    <div id="cDirs"></div>
-    <div id="cVerdict" aria-live="polite"></div>
-    <div id="cAllure">
-      <div id="cSpeed"></div>
-      <div id="cadence" class="seg seg-sm" role="radiogroup" aria-label="Votre allure"></div>
-    </div>
+  <main id="ui" aria-label="Votre tram">
+    <section id="uStation" class="u-card"></section>
+    <section id="uDir" class="u-card u-dir" tabindex="0" aria-label="Choix de la direction, flèches gauche et droite"><div id="uDirInner" class="u-dir-inner"></div></section>
+    <section id="uVerdict" class="u-verdict"></section>
+    <div id="srVerdict" class="sr-only" aria-live="polite"></div>
+    <section id="uAlert"></section>
+    <section class="u-card u-bottom">
+      <div id="uSpeed"></div>
+      <div id="cadence" class="seg seg-sm full" role="radiogroup" aria-label="Votre allure"></div>
+      <div id="uActions" class="u-actions"></div>
+    </section>
   </main>
 </div>
 
@@ -52,18 +61,21 @@
   <button type="button" data-act="update">Mettre à jour</button>
 </div>
 
-<dialog id="digest" class="dd" aria-labelledby="digestTitle">
-  <div class="dd-head"><b id="digestTitle">Infos réseau du jour</b><button type="button" class="icon-btn" data-act="digest-close" aria-label="Fermer" data-icon="x"></button></div>
-  <div class="dd-body">
-    <p class="muted">Travaux, fermetures, perturbations annoncées sur le tram, même hors de votre ligne. Affiché une fois par jour ; les alertes qui vous touchent apparaissent directement dans le verdict.</p>
-    <div id="digestBody"></div>
-    <div class="acts-line" style="margin-top:14px"><button type="button" class="btn" data-act="digest-close">Compris</button></div>
-  </div>
+<div id="onb" class="onb hidden" role="dialog" aria-modal="true" aria-label="Présentation"><div id="onbBody" class="onb-body"></div></div>
+
+<dialog id="menu" class="dd" aria-label="Menu">
+  <div class="grabber" aria-hidden="true"></div>
+  <div class="dd-head"><b>Tram Radar</b><button type="button" class="dd-done" data-act="close">OK</button></div>
+  <div id="menuBody" class="dd-body"></div>
 </dialog>
 
-<dialog id="details" class="dd" aria-label="Détails">
-  <div class="dd-head"><b>Détails</b><button type="button" class="icon-btn" data-act="details-close" aria-label="Fermer" data-icon="x"></button></div>
-  <div id="ddBody" class="dd-body"></div>
+<dialog id="digest" class="dd" aria-labelledby="digestTitle">
+  <div class="grabber" aria-hidden="true"></div>
+  <div class="dd-head"><b id="digestTitle">Infos réseau du jour</b><button type="button" class="dd-done" data-act="close">OK</button></div>
+  <div class="dd-body">
+    <p class="muted">Travaux, fermetures et perturbations annoncés sur le tram, même hors de votre ligne. Présenté une fois par jour ; ce qui vous touche s’affiche directement sur l’écran principal.</p>
+    <div id="digestBody"></div>
+  </div>
 </dialog>
 
 <dialog id="cfg" class="cfg" aria-labelledby="cfgTitle">
@@ -84,7 +96,7 @@
   </div>
 </dialog>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="assets/vendor/leaflet/leaflet.js"></script>
 <script src="assets/config.js?v=__BUILD__"></script>
 <script src="assets/app.js?v=__BUILD__"></script>
 </body>

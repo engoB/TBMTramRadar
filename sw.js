@@ -4,7 +4,7 @@ const BUILD = '__BUILD__';
 const CACHE = 'tbm-radar-' + BUILD;
 const CORE = [
   './', 'index.html', 'assets/app.css', 'assets/app.js', 'assets/config.js',
-  'manifest.webmanifest', 'assets/icons/icon.svg', 'assets/icons/icon-192.png', 'data/network.json', 'version.json'
+  'manifest.webmanifest', 'privacy.html', 'assets/icons/icon.svg', 'assets/vendor/leaflet/leaflet.js', 'assets/vendor/leaflet/leaflet.css', 'assets/icons/icon-192.png', 'data/network.json', 'version.json'
 ];
 
 self.addEventListener('install', event => {
