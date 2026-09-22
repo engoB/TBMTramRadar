@@ -724,3 +724,42 @@
   .toast{top:auto;bottom:calc(var(--safe-b) + 24px);border-radius:14px}
   .banner{top:calc(var(--safe-t) + 58px)}
   @media (prefers-reduced-motion:reduce){ .u-dir-name{animation:none!important} }
+
+  /* =================== v5.1 =================== */
+  /* Rames : capsule orientée dans le sens de la marche */
+  .tv{position:relative;width:30px;height:30px}
+  .tv-body{position:absolute;left:3px;top:10px;width:24px;height:10px;border-radius:5px;background:var(--c);box-shadow:0 0 0 2px #fff,0 2px 5px rgba(15,23,42,.35);transform-origin:50% 50%}
+  .tv-body::after{content:"";position:absolute;right:2px;top:3px;width:4px;height:4px;border-radius:50%;background:#fff;opacity:.9}
+  .tv b{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:8.5px;font-weight:800;color:#fff;line-height:1;pointer-events:none;text-shadow:0 0 2px var(--c)}
+  .tv.dwell .tv-body{box-shadow:0 0 0 2px #fff,0 0 0 5px color-mix(in srgb,var(--c) 30%,transparent),0 2px 5px rgba(15,23,42,.35)}
+  .z-dest .tv b{font-size:9.5px}
+
+  /* Sélecteur de direction */
+  .u-eyebrow.warn{color:var(--hurry-ink);background:var(--hurry-bg);padding:2px 7px;border-radius:6px}
+  .u-dir-bot{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:6px}
+  .u-dir-bot .u-dots{margin:0}
+  .u-dots i.off{opacity:.35}
+  .u-other{font-size:13px;font-weight:700;color:var(--me);padding:4px 6px;border-radius:8px}
+  .u-dir-empty .u-other{display:block;margin:6px auto 0}
+  .row-check{color:var(--me)}
+  .row-check svg{color:var(--me)}
+
+  /* Plan (direction non desservie à votre station) */
+  .u-plan{list-style:none;margin:4px 0 0;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.2);display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.3}
+  .u-verdict:not([class*="v-"]) .u-plan{background:var(--wash)}
+  .u-plan li{display:flex;align-items:center;gap:8px}
+  .u-plan li > svg{flex:none}
+  .u-plan .badge{box-shadow:0 0 0 1.5px #fff}
+
+  /* Dernier tram, fin de service */
+  .u-lastpill{align-self:flex-start;font-size:12.5px;font-weight:800;padding:4px 9px;border-radius:8px;background:#0f172a;color:#fff;text-transform:uppercase;letter-spacing:.03em}
+  .u-lastpill.soft{background:rgba(255,255,255,.25);color:inherit;text-transform:none;letter-spacing:0}
+  .u-verdict:not([class*="v-"]) .u-lastpill.soft{background:var(--wash)}
+  .u-verdict.v-off{background:#334155;color:#fff}
+  .u-reason{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:14px;background:rgba(255,255,255,.1);font-size:14.5px;line-height:1.4}
+  .u-reason svg{flex:none;color:#fbbf24;margin-top:1px}
+  .u-reason span{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+  .u-alt{padding:12px;border-radius:14px;background:#fff;color:var(--ink);font-size:14.5px;line-height:1.45}
+  .u-alt .u-eyebrow{margin-bottom:2px}
+  .mini.v-off{border-left-color:#334155}
+  .u-bottom{gap:8px}

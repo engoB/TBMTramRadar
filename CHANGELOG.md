@@ -3,6 +3,15 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.1.0
+- Toutes les directions du réseau : si votre station ne dessert pas celle voulue, l'app indique le tram le plus rapide (à pied jusqu'à une autre station, ou avec une correspondance) et les étapes.
+- « Autre direction » : liste de tous les terminus, par ligne.
+- Fin de service et travaux : « Dernier tram annoncé », et quand il n'y a plus rien, « Plus de tram vers… » avec la raison publiée par TBM et une autre solution si elle existe.
+- Directions mémorisées par station, visibles même quand aucun tram n'y circule.
+- Habitudes : la direction que vous prenez d'habitude à cette heure-ci est présélectionnée.
+- Rames dessinées en capsules orientées dans le sens de la marche, plus discrètes.
+- Retrait de « Me prévenir », « Partager » et « Plans » en attendant une soumission App Store.
+
 ## 5.0.0
 - Conçue comme une app iOS : barre de navigation, contrôle segmenté « Tram | Carte », feuilles avec poignée, polices système.
 - Vue Tram plein écran sans défilement ; vue Carte plein écran avec suivi du trajet activable et résumé du verdict.

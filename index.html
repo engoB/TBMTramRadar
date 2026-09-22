@@ -49,7 +49,6 @@
     <section class="u-card u-bottom">
       <div id="uSpeed"></div>
       <div id="cadence" class="seg seg-sm full" role="radiogroup" aria-label="Votre allure"></div>
-      <div id="uActions" class="u-actions"></div>
     </section>
   </main>
 </div>
@@ -67,6 +66,15 @@
   <div class="grabber" aria-hidden="true"></div>
   <div class="dd-head"><b>Tram Radar</b><button type="button" class="dd-done" data-act="close">OK</button></div>
   <div id="menuBody" class="dd-body"></div>
+</dialog>
+
+<dialog id="dirSheet" class="dd" aria-labelledby="dirTitle">
+  <div class="grabber" aria-hidden="true"></div>
+  <div class="dd-head"><b id="dirTitle">Choisir une direction</b><button type="button" class="dd-done" data-act="close">OK</button></div>
+  <div class="dd-body">
+    <p class="muted">Tous les terminus du réseau. Si votre station ne dessert pas celui choisi, l’app vous indique le tram le plus rapide : à pied jusqu’à une autre station, ou avec une correspondance.</p>
+    <div id="dirBody"></div>
+  </div>
 </dialog>
 
 <dialog id="digest" class="dd" aria-labelledby="digestTitle">

@@ -97,6 +97,7 @@ const ICONS = {
   list: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
   compass: '<circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/>',
   clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
   chevL: '<path d="m15 18-6-6 6-6"/>',
   chevR: '<path d="m9 18 6-6-6-6"/>',
   star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
@@ -145,7 +146,7 @@ const state = {
   lineMeta: Object.fromEntries(LINE_IDS.map(l => [l, { color: CFG.lines[l].color, shapes: null }])),
   user: null, mode: 'gps', lastGps: null, gps: 'search', firstFix: true,
   activeLines: new Set(savedLines.length ? savedLines : LINE_IDS),
-  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirTouched: false, view: store.get('tbm-view') || 'ui', follow: false, margin: store.get('tbm-margin') ?? 60, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
+  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirRemote: false, dirTouched: false, feedHorizon: 0, view: store.get('tbm-view') || 'ui', follow: false, margin: store.get('tbm-margin') ?? 60, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
   recents: store.get('tbm-recents') || [],
   cadence: store.get('tbm-cadence') || 'normal',
   bannerDismissed: { far: false, nogps: false }, bannerKind: null,
@@ -329,7 +330,7 @@ function parseET(js, line) {
     let prev = -Infinity;
     for (const c of calls) { if (c.arr < prev) c.arr = prev; if (c.dep < c.arr) c.dep = c.arr; prev = c.dep; }
     const last = calls[calls.length - 1];
-    if (last.arr < now - 120 || calls[0].dep > now + 5400) continue;
+    if (last.arr < now - 120 || calls[0].dep > now + 10800) continue;
     const dir = (j.DirectionRef && j.DirectionRef.value) || '0';
     const id = (j.VehicleJourneyRef && j.VehicleJourneyRef.value) || `${line}${dir}:${calls[0].dep}`;
     const callIdx = {};
@@ -395,6 +396,8 @@ async function refreshLines(lines) {
     .concat(fresh);
   indexJourneys();
   absorb(fresh);
+  learnDirections(fresh);
+  state.feedHorizon = state.journeys.reduce((m, j) => Math.max(m, j.calls[0].dep), 0);
   state.lastUpdate = now;
   state.api = failed.size ? 'partial' : 'ok';
   state.apiError = failed.size ? `${failed.size} flux sur ${res.length} n\u2019ont pas répondu` : '';
@@ -541,7 +544,7 @@ function stationBoard(S, w, now, minCount = 3) {
   for (const [j, i] of state.stIndex.get(S.id) || []) {
     if (!state.activeLines.has(j.line)) continue;
     const c = j.calls[i];
-    if (c.dep - now < -1 || c.arr - now > 5400) continue;
+    if (c.dep - now < -1 || c.arr - now > 10800) continue;
     const key = j.line + '|' + j.dest;
     let g = groups.get(key);
     if (!g) { g = { key, line: j.line, dest: j.dest, all: [] }; groups.set(key, g); }
@@ -560,34 +563,176 @@ function stationBoard(S, w, now, minCount = 3) {
 }
 
 /* =========================================================
-   Moteur : station la plus proche + direction choisie
+   Moteur : station la plus proche, directions et plan
    ========================================================= */
 function nearestStations() {
   return candidateStations().slice(0, 4).map(st => ({ st, d: (walkFor(st) || { dist: Infinity }).dist })).sort((a, b) => a.d - b.d).map(x => x.st);
 }
+
+/* Catalogue durable des directions : par station (terminus déjà vus à cette station) et pour tout le réseau.
+   Il permet d'afficher une direction même quand plus aucun tram n'y circule (travaux, fin de service). */
+const dirCat = store.get('tbm-dircat-v1') || { st: {}, term: {}, t: 0 };
+let dirCatDirty = false;
+function learnDirections(journeys) {
+  const now = Date.now();
+  for (const j of journeys) {
+    const last = j.calls[j.calls.length - 1];
+    const key = j.line + '|' + j.dest;
+    dirCat.term[key] = { line: j.line, dest: j.dest, destSt: last.st, seen: now };
+    for (let i = 0; i < j.calls.length - 1; i++) {
+      const s = j.calls[i].st;
+      const m = dirCat.st[s] || (dirCat.st[s] = {});
+      if (!m[key]) dirCatDirty = true;
+      m[key] = now;
+    }
+  }
+  const old = now - 21 * 864e5;
+  for (const [k, v] of Object.entries(dirCat.term)) if (v.seen < old) { delete dirCat.term[k]; dirCatDirty = true; }
+  if (dirCatDirty || now - dirCat.t > 3600e3) { dirCat.t = now; store.set('tbm-dircat-v1', dirCat); dirCatDirty = false; }
+}
+const termOf = key => dirCat.term[key] || null;
+
+/* Habitudes : la direction que vous prenez à cette heure-ci (matin, journée, soir), apprise de vos choix. */
+const bucketNow = () => { const h = new Date().getHours(); return h < 11 ? 'm' : h < 16 ? 'd' : 'e'; };
+function learnHabit(stId, key) {
+  const h = store.get('tbm-habits') || { st: {}, all: {} };
+  const b = bucketNow();
+  const bump = o => { o[b] = o[b] || {}; o[b][key] = (o[b][key] || 0) + 1; };
+  bump(h.st[stId] = h.st[stId] || {});
+  bump(h.all);
+  store.set('tbm-habits', h);
+}
+function habitFor(stId) {
+  const h = store.get('tbm-habits');
+  if (!h) return null;
+  const b = bucketNow();
+  const best = o => { let k = null, n = 0; for (const [kk, c] of Object.entries((o && o[b]) || {})) if (c > n) { n = c; k = kk; } return { k, n }; };
+  const a = best(h.st[stId]);
+  if (a.n >= 2) return { key: a.k, local: true };
+  const g = best(h.all);
+  if (g.n >= 3) return { key: g.k, local: false };
+  return null;
+}
+
+/* Trajets vers une station cible depuis les stations proches : direct, sinon avec une correspondance */
+function directOptions(stations, destId, now) {
+  const res = [];
+  for (const S of stations) {
+    if (S.id === destId) continue;
+    const w = walkFor(S);
+    for (const [j, i] of state.stIndex.get(S.id) || []) {
+      if (!state.activeLines.has(j.line)) continue;
+      const k = j.callIdx[destId];
+      if (k == null || k <= i) continue;
+      const it = mkItem(S, w, j, i, now);
+      if (it.depIn < -1) continue;
+      it.arrDest = j.calls[k].arr;
+      res.push(it);
+    }
+  }
+  return res;
+}
+function transferOptions(stations, destId, now) {
+  const res = [];
+  for (const S of stations) {
+    if (S.id === destId) continue;
+    const w = walkFor(S);
+    for (const [j, i] of state.stIndex.get(S.id) || []) {
+      if (!state.activeLines.has(j.line)) continue;
+      const first = mkItem(S, w, j, i, now);
+      if (first.depIn < -1 || first.arrIn > 3600) continue;
+      let best = null;
+      for (let k = i + 1; k < j.calls.length; k++) {
+        const T = j.calls[k].st, tArr = j.calls[k].arr;
+        if (T === destId) break;
+        for (const [j2, m] of state.stIndex.get(T) || []) {
+          if (j2.line === j.line || !state.activeLines.has(j2.line)) continue;
+          const c2 = j2.calls[m];
+          if (c2.dep < tArr + CFG.transferSec) continue;
+          const kd = j2.callIdx[destId];
+          if (kd == null || kd <= m) continue;
+          const arrDest = j2.calls[kd].arr;
+          if (!best || arrDest < best.arrDest) best = { arrDest, T, tArrT: tArr, j2, m, line: j2.line, tDep2: c2.dep, dest2: j2.dest };
+        }
+      }
+      if (best) { first.arrDest = best.arrDest; first.transfer = best; res.push(first); }
+    }
+  }
+  return res;
+}
+const rankKey = o => (o.v === 'red' ? 1e7 : 0) + o.arrDest + 0.15 * (o.w ? o.w.sec : 0);
+function planTo(destId, now) {
+  const stations = candidateStations();
+  const direct = directOptions(stations, destId, now);
+  const via = transferOptions(stations, destId, now);
+  const all = direct.concat(via).sort((a, b) => rankKey(a) - rankKey(b));
+  return all;
+}
+
+/* Dernier tram annoncé et raison d'une absence de service */
+function lastInfo(line, dest, list) {
+  const lastT = list && list.length ? list[list.length - 1].tArr : null;
+  const horizon = state.feedHorizon || 0;
+  const isLast = lastT != null && horizon - lastT > 1200 && list.length <= 3;
+  const msgs = state.messages.filter(m => m.lines.includes(line));
+  return { lastT: isLast ? lastT : null, reason: msgs[0] || null, dest };
+}
+
 function computeCtx(now) {
   const ctx = { now };
   if (!state.stopsReady) return ctx;
   const forced = state.fromId && state.stations[state.fromId];
   const list = forced ? [forced] : nearestStations();
   if (!list.length) return ctx;
-  // La plus proche ; si elle n'a aucun départ (terminus, ligne masquée), la suivante qui en a.
   let S = list[0], groups = stationBoard(S, walkFor(S), now, 3);
-  for (let k = 1; !groups.length && k < list.length; k++) {
+  // Station sans aucune direction connue (terminus d'arrivée, ligne masquée) : la suivante.
+  const known = st => Object.keys(dirCat.st[st.id] || {}).some(k => state.activeLines.has(k.split('|')[0]));
+  for (let k = 1; !groups.length && !known(S) && k < list.length; k++) {
     const g2 = stationBoard(list[k], walkFor(list[k]), now, 3);
-    if (g2.length) { ctx.skipped = S; S = list[k]; groups = g2; }
+    if (g2.length || known(list[k])) { ctx.skipped = S; S = list[k]; groups = g2; }
   }
   ctx.board = S;
   ctx.forced = !!forced;
   ctx.boardW = walkFor(S);
   ctx.groups = groups;
-  let g = null;
-  if (!state.dirTouched) { const f = favorites().find(x => x.st === S.id && ctx.groups.some(y => y.key === x.key)); if (f) g = ctx.groups.find(y => y.key === f.key); }
-  if (!g && state.dir) g = ctx.groups.find(x => x.key === state.dir) || null;
-  if (!g) for (const x of ctx.groups) if (!g || x.list[0].arrIn < g.list[0].arrIn) g = x;
-  ctx.g = g;
-  ctx.primary = g ? g.list[0] : null;
-  ctx.nextCatch = g && ctx.primary && ctx.primary.v === 'red' ? g.catchable : null;
+
+  // Directions de la station : celles qui ont des passages + celles déjà vues ici (même sans service).
+  const byKey = new Map(groups.map(g => [g.key, { key: g.key, line: g.line, dest: g.dest, g }]));
+  for (const key of Object.keys(dirCat.st[S.id] || {})) {
+    const t = termOf(key), line = key.split('|')[0];
+    if (!byKey.has(key) && t && state.activeLines.has(line)) byKey.set(key, { key, line, dest: t.dest, g: null });
+  }
+  ctx.dirs = [...byKey.values()].sort((a, b) => a.line.localeCompare(b.line) || a.dest.localeCompare(b.dest, 'fr'));
+
+  // Choix : favori, puis habitude (sauf choix manuel récent), puis choix mémorisé, puis le prochain départ.
+  let sel = null, remoteKey = null;
+  if (!state.dirTouched) {
+    const f = favorites().find(x => x.st === S.id && byKey.has(x.key));
+    if (f) sel = byKey.get(f.key);
+    if (!sel) { const h = habitFor(S.id); if (h) { if (byKey.has(h.key)) sel = byKey.get(h.key); else if (!h.local && termOf(h.key)) remoteKey = h.key; } }
+  }
+  if (!sel && !remoteKey && state.dir) { if (byKey.has(state.dir)) sel = byKey.get(state.dir); else if (state.dirRemote && termOf(state.dir)) remoteKey = state.dir; }
+  if (!sel && !remoteKey) { for (const d of ctx.dirs) if (d.g && (!sel || d.g.list[0].arrIn < sel.g.list[0].arrIn)) sel = d; if (!sel) sel = ctx.dirs[0] || null; }
+
+  if (remoteKey) {
+    const t = termOf(remoteKey);
+    ctx.remote = true;
+    ctx.sel = { key: remoteKey, line: t.line, dest: t.dest, g: null };
+    const opts = t.destSt && state.stations[t.destSt] ? planTo(t.destSt, now) : [];
+    ctx.options = opts;
+    ctx.primary = opts[0] || null;
+    ctx.nextCatch = ctx.primary && ctx.primary.v === 'red' ? opts.find(o => o.v && o.v !== 'red') || null : null;
+    if (!opts.length) ctx.off = lastInfo(t.line, t.dest, []);
+  } else if (sel) {
+    ctx.sel = sel;
+    ctx.g = sel.g;
+    if (sel.g) {
+      ctx.primary = sel.g.list[0];
+      ctx.nextCatch = ctx.primary.v === 'red' ? sel.g.catchable : null;
+      const li = lastInfo(sel.line, sel.dest, sel.g.all);
+      if (li.lastT) ctx.last = li.lastT;
+    } else ctx.off = lastInfo(sel.line, sel.dest, []);
+  }
   return ctx;
 }
 
@@ -818,8 +963,8 @@ function tramPos(j, now) {
 }
 const trams = new Map();
 function tramIcon(line, dest) {
-  return L.divIcon({ className: 'tram-icon', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -14],
-    html: `<div class="tram" style="--c:${lineColor(line)}"><div class="dir"></div><b>${esc(line)}</b><span class="dest">${esc(dest)}</span></div>` });
+  return L.divIcon({ className: 'tram-icon', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -10],
+    html: `<div class="tv" style="--c:${lineColor(line)}" title="${esc(dest)}"><i class="tv-body"></i><b>${esc(line)}</b></div>` });
 }
 function updateTrams(now) {
   const seen = new Set();
@@ -839,9 +984,9 @@ function updateTrams(now) {
     }
     t.p = p;
     t.marker.setLatLng([p.lat, p.lng]);
-    if (!t.dirEl) { const el = t.marker.getElement(); if (el) { t.dirEl = el.querySelector('.dir'); t.body = el.querySelector('.tram'); } }
+    if (!t.dirEl) { const el = t.marker.getElement(); if (el) { t.dirEl = el.querySelector('.tv-body'); t.body = el.querySelector('.tv'); } }
     if (t.dirEl) {
-      t.dirEl.style.transform = `rotate(${p.bearing.toFixed(1)}deg)`;
+      t.dirEl.style.transform = `rotate(${(p.bearing - 90).toFixed(1)}deg)`;
       if (t.body.classList.contains('dwell') !== p.dwell) t.body.classList.toggle('dwell', p.dwell);
     }
   }
@@ -1136,36 +1281,6 @@ function toggleFav(ctx) {
   tickUi(true);
 }
 
-/* ---------- Directions : flèches gauche / droite ---------- */
-function orderedDirs(ctx) {
-  return (ctx.groups || []).slice().sort((a, b) => a.line.localeCompare(b.line) || a.dest.localeCompare(b.dest, 'fr'));
-}
-function stepDir(delta) {
-  const ctx = lastCtx;
-  const dirs = orderedDirs(ctx || {});
-  if (dirs.length < 2) return;
-  const i = Math.max(0, dirs.findIndex(g => ctx.g && g.key === ctx.g.key));
-  const n = dirs[(i + delta + dirs.length) % dirs.length];
-  state.dir = n.key; state.dirTouched = true;
-  store.set('tbm-dir', n.key);
-  haptic('select');
-  const el = $('#uDirName');
-  if (el) { el.classList.remove('slide-l', 'slide-r'); void el.offsetWidth; el.classList.add(delta > 0 ? 'slide-l' : 'slide-r'); }
-  tickUi(true);
-}
-(() => {
-  const zone = $('#uDir');
-  let sx = null, sy = null;
-  zone.addEventListener('pointerdown', e => { sx = e.clientX; sy = e.clientY; });
-  zone.addEventListener('pointerup', e => {
-    if (sx == null) return;
-    const dx = e.clientX - sx, dy = e.clientY - sy;
-    sx = null;
-    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) stepDir(dx < 0 ? 1 : -1);
-  });
-  zone.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') stepDir(-1); else if (e.key === 'ArrowRight') stepDir(1); });
-})();
-
 /* ---------- Rendus ---------- */
 function ringOf(st) {
   const cols = [...st.lines].sort().map(lineColor);
@@ -1185,23 +1300,6 @@ function renderStation(ctx) {
     <div class="u-walk">${w ? `<b>${fmtWalk(w.sec)}</b><small>${fmtDist(w.dist)} à pied${w.routed ? '' : ' (estimé)'}</small>` : ''}</div>
     ${ctx.forced ? '<button type="button" class="u-pill" data-act="from-clear">La plus proche</button>' : ''}
   </div>`);
-}
-function renderDir(ctx) {
-  const el = $('#uDirInner');
-  const dirs = orderedDirs(ctx);
-  if (!dirs.length) { setHTML(el, `<div class="u-dir-empty">Aucune direction desservie dans l\u2019heure</div>`); $('#uDir').dataset.count = '0'; return; }
-  const i = Math.max(0, dirs.findIndex(g => ctx.g && g.key === ctx.g.key));
-  const g = dirs[i], fav = isFav(ctx.board.id, g.key);
-  $('#uDir').dataset.count = String(dirs.length);
-  setHTML(el, `
-    <button type="button" class="u-arrow" data-act="dir-prev" aria-label="Direction précédente" ${dirs.length < 2 ? 'disabled' : ''}>${svg('chevL', 26)}</button>
-    <div class="u-dir-cur" role="group" aria-roledescription="sélecteur" aria-label="Direction ${i + 1} sur ${dirs.length} : ligne ${esc(g.line)} vers ${esc(g.dest)}">
-      <div class="u-dir-top">${badge(g.line)}<span class="u-eyebrow">Direction ${i + 1}/${dirs.length}</span>
-        <button type="button" class="u-fav" data-act="fav" aria-pressed="${fav}" aria-label="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${svg(fav ? 'starFill' : 'star', 20)}</button></div>
-      <div id="uDirName" class="u-dir-name">${esc(g.dest)}</div>
-      <div class="u-dots" aria-hidden="true">${dirs.map((d, k) => `<i class="${k === i ? 'on' : ''}" style="--c:${lineColor(d.line)}"></i>`).join('')}</div>
-    </div>
-    <button type="button" class="u-arrow" data-act="dir-next" aria-label="Direction suivante" ${dirs.length < 2 ? 'disabled' : ''}>${svg('chevR', 26)}</button>`);
 }
 function race(p, now) {
   const walk = p.w ? p.w.sec : null;
@@ -1240,6 +1338,111 @@ function verdictWords(ctx) {
 function simButtons() {
   return `<div class="u-acts"><button class="btn" type="button" data-act="sim" data-spot="bourse">${svg('pin', 16)}Place de la Bourse</button><button class="btn ghost" type="button" data-act="sim" data-spot="quinconces">Quinconces</button></div>`;
 }
+function renderAlert(ctx) {
+  const el = $('#uAlert');
+  const p = ctx.primary;
+  const impact = ctx.off ? [] : p ? relevantMessages([p.line, ...(p.transfer ? [p.transfer.line] : [])], [p.S.id]) : ctx.board ? relevantMessages([...ctx.board.lines], [ctx.board.id]) : [];
+  if (!impact.length) return setHTML(el, '');
+  setHTML(el, `<button type="button" class="u-impact" data-act="digest">${svg('alert', 18)}<span><b>Perturbation en cours</b>${esc((impact[0].title || impact[0].body).slice(0, 90))}</span>${svg('chevR', 18)}</button>`);
+}
+/* ---------- Directions : flèches gauche / droite + « Autre direction » ---------- */
+function chooseDir(key, remote) {
+  state.dir = key; state.dirRemote = !!remote; state.dirTouched = true;
+  store.set('tbm-dir', key);
+  if (lastCtx && lastCtx.board) learnHabit(lastCtx.board.id, key);
+  haptic('select');
+}
+function stepDir(delta) {
+  const ctx = lastCtx;
+  const dirs = (ctx && ctx.dirs) || [];
+  if (!dirs.length) return;
+  let i = ctx.remote ? (delta > 0 ? -1 : 0) : dirs.findIndex(d => ctx.sel && d.key === ctx.sel.key);
+  if (dirs.length < 2 && !ctx.remote) return;
+  const n = dirs[(i + delta + dirs.length) % dirs.length];
+  chooseDir(n.key, false);
+  const el = $('#uDirName');
+  if (el) { el.classList.remove('slide-l', 'slide-r'); void el.offsetWidth; el.classList.add(delta > 0 ? 'slide-l' : 'slide-r'); }
+  tickUi(true);
+}
+(() => {
+  const zone = $('#uDir');
+  let sx = null, sy = null;
+  zone.addEventListener('pointerdown', e => { sx = e.clientX; sy = e.clientY; });
+  zone.addEventListener('pointerup', e => {
+    if (sx == null) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    sx = null;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) stepDir(dx < 0 ? 1 : -1);
+  });
+  zone.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') stepDir(-1); else if (e.key === 'ArrowRight') stepDir(1); });
+})();
+function renderDir(ctx) {
+  const el = $('#uDirInner');
+  const dirs = ctx.dirs || [];
+  if (!ctx.board || (!dirs.length && !ctx.remote)) {
+    return setHTML(el, `<div class="u-dir-empty">Aucune direction connue ici pour le moment<button type="button" class="u-other" data-act="dirsheet">Choisir une direction</button></div>`);
+  }
+  const s = ctx.sel;
+  const i = ctx.remote ? -1 : dirs.findIndex(d => d.key === s.key);
+  const fav = !ctx.remote && isFav(ctx.board.id, s.key);
+  const eyebrow = ctx.remote ? 'Pas desservie ici' : `Direction ${i + 1}/${dirs.length}`;
+  setHTML(el, `
+    <button type="button" class="u-arrow" data-act="dir-prev" aria-label="Direction précédente" ${dirs.length < 2 && !ctx.remote ? 'disabled' : ''}>${svg('chevL', 26)}</button>
+    <div class="u-dir-cur" role="group" aria-label="${esc(eyebrow)} : ligne ${esc(s.line)} vers ${esc(s.dest)}">
+      <div class="u-dir-top">${badge(s.line)}<span class="u-eyebrow ${ctx.remote ? 'warn' : ''}">${eyebrow}</span>
+        ${ctx.remote ? '' : `<button type="button" class="u-fav" data-act="fav" aria-pressed="${fav}" aria-label="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${svg(fav ? 'starFill' : 'star', 20)}</button>`}</div>
+      <div id="uDirName" class="u-dir-name">${esc(s.dest)}</div>
+      <div class="u-dir-bot">
+        ${dirs.length > 1 ? `<span class="u-dots" aria-hidden="true">${dirs.map((d, k) => `<i class="${k === i ? 'on' : ''} ${d.g ? '' : 'off'}" style="--c:${lineColor(d.line)}"></i>`).join('')}</span>` : ''}
+        <button type="button" class="u-other" data-act="dirsheet">Autre direction</button>
+      </div>
+    </div>
+    <button type="button" class="u-arrow" data-act="dir-next" aria-label="Direction suivante" ${dirs.length < 2 && !ctx.remote ? 'disabled' : ''}>${svg('chevR', 26)}</button>`);
+}
+function renderDirSheet() {
+  const d = $('#dirSheet');
+  if (!d.open) return;
+  const ctx = lastCtx || {};
+  const here = new Set((ctx.dirs || []).map(x => x.key));
+  const byLine = {};
+  for (const [key, t] of Object.entries(dirCat.term)) {
+    if (!state.activeLines.has(t.line)) continue;
+    (byLine[t.line] = byLine[t.line] || []).push({ key, ...t });
+  }
+  const lines = Object.keys(byLine).sort();
+  const sel = ctx.sel && ctx.sel.key;
+  setHTML($('#dirBody'), lines.length ? lines.map(l => `<h3>${badge(l, 'sm')} Ligne ${esc(l)}</h3><div class="group">${byLine[l].sort((a, b) => a.dest.localeCompare(b.dest, 'fr')).map(t => `
+      <button type="button" class="row" data-seldir="${esc(t.key)}" data-remote="${here.has(t.key) ? '0' : '1'}">
+        <span class="row-t">${esc(t.dest)}<small>${here.has(t.key) ? 'Desservie à votre station' : 'Avec un trajet à pied ou une correspondance'}</small></span>
+        ${t.key === sel ? `<span class="row-check">${svg('check', 18)}</span>` : svg('chevR', 16)}</button>`).join('')}</div>`).join('')
+    : '<p class="muted">Les directions apparaissent dès que le temps réel est chargé.</p>');
+}
+
+/* ---------- Verdict ---------- */
+function planSteps(ctx) {
+  const p = ctx.primary, rows = [];
+  if (p.w && (ctx.remote || p.S.id !== ctx.board.id)) rows.push(`<li>${svg('walk', 16)}<span>Marchez ${fmtWalk(p.w.sec)} jusqu\u2019à <b>${esc(p.S.name)}</b></span></li>`);
+  rows.push(`<li>${badge(p.line, 'sm')}<span>Tram vers ${esc(p.dest)}${p.transfer ? `, descendez à <b>${esc(stName(p.transfer.T))}</b>` : ''}</span></li>`);
+  if (p.transfer) rows.push(`<li>${badge(p.transfer.line, 'sm')}<span>Puis vers <b>${esc(p.transfer.dest2)}</b> à ${fmtClock(p.transfer.tDep2)} (${fmtMS(p.transfer.tDep2 - p.transfer.tArrT)} pour changer)</span></li>`);
+  return `<ul class="u-plan">${rows.join('')}</ul>`;
+}
+function renderOff(el, ctx) {
+  const o = ctx.off, s = ctx.sel;
+  el.className = 'u-verdict v-off';
+  const reason = o.reason ? `<div class="u-reason">${svg('alert', 18)}<span>${o.reason.title ? `<b>${esc(o.reason.title)}</b> ` : ''}${esc(o.reason.body)}</span></div>`
+    : '<div class="u-v-sub">Aucun passage annoncé et aucune info trafic publiée : fin de service ou interruption en cours.</div>';
+  let alt = '';
+  if (!ctx.remote && s) {
+    const t = termOf(s.key);
+    const opts = t && t.destSt ? planTo(t.destSt, ctx.now) : [];
+    const a = opts.find(x => x.v && x.v !== 'red') || opts[0];
+    if (a) alt = `<div class="u-alt"><span class="u-eyebrow">Autre solution</span>${a.S.id !== ctx.board.id ? `Marchez jusqu\u2019à <b>${esc(a.S.name)}</b>, puis ` : ''}${badge(a.line, 'sm')} dans <b>${cdSpan(a, 'min')}</b>${a.transfer ? `, changement à ${esc(stName(a.transfer.T))} pour ${badge(a.transfer.line, 'sm')}` : ''}.</div>`;
+  }
+  const others = (ctx.dirs || []).filter(d => d.g).length;
+  setHTML(el, `<div class="u-v-head"><strong>Plus de tram vers ${esc(s.dest)}</strong></div>${reason}${alt}
+    ${others && !alt ? `<div class="u-v-foot"><span>${others} autre${others > 1 ? 's' : ''} direction${others > 1 ? 's' : ''} circule${others > 1 ? 'nt' : ''} ici : utilisez les flèches.</span></div>` : ''}`);
+  $('#srVerdict').textContent = `Plus de tram vers ${s.dest}.`;
+}
 function renderVerdict(ctx) {
   const el = $('#uVerdict');
   const box = (cls, h, t, extra = '') => { el.className = 'u-verdict ' + cls; setHTML(el, `<div class="u-v-head"><strong>${h}</strong></div><div class="u-v-sub">${t}</div>${extra}`); };
@@ -1249,127 +1452,43 @@ function renderVerdict(ctx) {
   }
   if (!state.stopsReady || (!state.lastUpdate && state.api === 'loading')) return box('', 'Connexion…', 'Chargement des stations et des passages TBM.');
   if (!ctx.board) return box('', 'Où êtes-vous ?', 'Autorisez la localisation, placez-vous sur la carte, ou simulez une position.', simButtons());
+  if (ctx.off) return renderOff(el, ctx);
   const p = ctx.primary;
-  if (!p) return box('', 'Pas de départ', state.journeys.length ? 'Rien d\u2019annoncé dans l\u2019heure à cette station.' : 'Aucun tram annoncé : service probablement terminé.');
+  if (!p) return box('', 'Pas de départ', 'Rien d\u2019annoncé pour le moment.');
   const now = ctx.now, vw = verdictWords(ctx);
   el.className = 'u-verdict ' + (p.v ? 'v-' + p.v : '');
-  const next = ctx.g.list.slice(1, 3);
+  const isLast = ctx.last && Math.abs(ctx.last - p.tArr) < 1;
+  const next = !ctx.remote && ctx.g ? ctx.g.list.slice(1, 3) : [];
   const delay = p.delay != null && Math.abs(p.delay) >= 60 ? `<span class="delay">${p.delay > 0 ? 'retard +' : 'avance '}${Math.abs(Math.round(p.delay / 60))} min</span>` : '';
+  const lastPill = isLast ? '<span class="u-lastpill">Dernier tram annoncé</span>' : ctx.last ? `<span class="u-lastpill soft">Dernier à ${fmtClock(ctx.last)}</span>` : '';
   setHTML(el, `
     <div class="u-v-head">
       <strong>${vw ? vw.head : 'Placez-vous'}</strong>
       <div class="u-cd">${cdSpan(p)}<small>${p.arrIn > 0 ? 'avant l\u2019arrivée' : 'repart ' + fmtClockS(p.tDep)}</small></div>
     </div>
+    ${lastPill}
     <div class="u-v-sub">${vw ? vw.sub : 'Placez votre repère pour savoir si vous l\u2019aurez.'}</div>
+    ${ctx.remote ? planSteps(ctx) : ''}
     ${race(p, now)}
     <div class="u-v-foot"><span>${esc(whereText(p, now))}</span>${delay}${p.live ? '<span class="rt">temps réel</span>' : '<span class="rt theo">théorique</span>'}
       ${next.length ? `<span class="u-next">puis ${next.map(n => cdSpan(n, 'min')).join(', ')}</span>` : ''}</div>`);
-  const sum = vw ? `${vw.head}. Tram ${p.line} vers ${p.dest}, ${p.arrIn > 0 ? 'dans ' + Math.max(1, Math.round(p.arrIn / 60)) + ' minutes' : 'à quai'}.` : '';
+  const sum = vw ? `${vw.head}. Tram ${p.line} vers ${p.dest}, ${p.arrIn > 0 ? 'dans ' + Math.max(1, Math.round(p.arrIn / 60)) + ' minutes' : 'à quai'}${isLast ? ', dernier tram annoncé' : ''}.` : '';
   const sr = $('#srVerdict');
   if (sr.textContent !== sum) sr.textContent = sum;
 }
-function renderAlert(ctx) {
-  const el = $('#uAlert');
-  const p = ctx.primary;
-  const impact = p ? relevantMessages([p.line], [p.S.id]) : ctx.board ? relevantMessages([...ctx.board.lines], [ctx.board.id]) : [];
-  if (!impact.length) return setHTML(el, '');
-  setHTML(el, `<button type="button" class="u-impact" data-act="digest">${svg('alert', 18)}<span><b>Perturbation en cours</b>${esc((impact[0].title || impact[0].body).slice(0, 90))}</span>${svg('chevR', 18)}</button>`);
-}
-function renderBottom(ctx) {
+function renderBottom() {
   const preset = CADENCES.find(c => c.id === state.cadence) || CADENCES[1];
   setHTML($('#uSpeed'), state.realKmh
     ? `<span class="spd on"><i></i>Votre vitesse réelle : <b>${fmtKmh(state.realKmh)}</b></span>`
     : `<span class="spd"><i></i>Allure « ${preset.label} »${state.mode === 'gps' ? ', vitesse réelle dès que vous marchez' : ''}</span>`);
-  const p = ctx.primary, a = state.alert;
-  const alertLbl = a ? `Alerte ${fmtClock(a.leaveAt)}` : 'Me prévenir';
-  setHTML($('#uActions'), `
-    <button type="button" class="u-act ${a ? 'on' : ''}" data-act="alert" ${!p || !p.w ? 'disabled' : ''} aria-pressed="${!!a}">${svg(a ? 'bellOn' : 'bell', 20)}<span>${alertLbl}</span></button>
-    <button type="button" class="u-act" data-act="maps" ${!ctx.board ? 'disabled' : ''}>${svg('walk', 20)}<span>Plans</span></button>
-    <button type="button" class="u-act" data-act="share" ${!p ? 'disabled' : ''}>${svg('share', 20)}<span>Partager</span></button>`);
 }
 function renderMini(ctx) {
   const el = $('#mini');
   const p = ctx.primary, vw = verdictWords(ctx);
+  if (ctx.off) { el.className = 'mini v-off'; return setHTML(el, `${badge(ctx.sel.line)}<span class="mini-main"><b>Plus de tram</b><small>vers ${esc(ctx.sel.dest)}</small></span>`); }
   el.className = 'mini ' + (p && p.v ? 'v-' + p.v : '');
   if (!p) return setHTML(el, `<span class="mini-t">${ctx.board ? esc(ctx.board.name) + ' : pas de départ' : 'Où êtes-vous ?'}</span>`);
   setHTML(el, `${badge(p.line)}<span class="mini-main"><b>${vw ? vw.head : 'Placez-vous'}</b><small>vers ${esc(p.dest)}, ${esc(p.S.name)}</small></span><span class="mini-cd">${cdSpan(p)}</span>`);
-}
-
-/* ---------- Alerte de départ (notification locale, mise à jour en temps réel) ---------- */
-const ALERT_ID = 4201;
-async function askNotifPermission() {
-  try {
-    if (Native.notif) { const r = await Native.notif.requestPermissions(); return r.display === 'granted'; }
-    if ('Notification' in window) { if (Notification.permission === 'granted') return true; return (await Notification.requestPermission()) === 'granted'; }
-  } catch (_) { /* refus ou indisponible */ }
-  return false;
-}
-async function scheduleNative(a) {
-  if (!Native.notif) return;
-  try {
-    await Native.notif.cancel({ notifications: [{ id: ALERT_ID }] });
-    await Native.notif.schedule({ notifications: [{ id: ALERT_ID, title: `Partez maintenant : tram ${a.line}`, body: `Vers ${a.dest}, à quai à ${a.stName} vers ${fmtClock(a.arr)}.`, schedule: { at: toDate(a.leaveAt), allowWhileIdle: true } }] });
-    a.scheduledAt = a.leaveAt;
-  } catch (_) { /* notifications refusées */ }
-}
-async function toggleAlert() {
-  if (state.alert) { cancelAlert('Alerte annulée'); return; }
-  const p = lastCtx && lastCtx.primary;
-  if (!p || !p.w) return;
-  const target = p.v === 'red' && lastCtx.nextCatch ? lastCtx.nextCatch : p;
-  const leaveAt = target.tArr - target.w.sec - state.margin;
-  if (leaveAt - nowS() < 20) { haptic(target.v || 'orange'); toast('Partez maintenant !'); return; }
-  const granted = await askNotifPermission();
-  state.alert = { jid: target.j.id, st: target.S.id, stName: target.S.name, line: target.line, dest: target.dest, arr: target.tArr, leaveAt, scheduledAt: null, granted };
-  await scheduleNative(state.alert);
-  haptic('green');
-  toast(`Alerte à ${fmtClock(leaveAt)} pour le tram de ${fmtClock(target.tArr)}${granted ? '' : ' (dans l\u2019app : notifications refusées)'}`, true);
-  tickUi(true);
-}
-function cancelAlert(msg) {
-  if (Native.notif) Native.notif.cancel({ notifications: [{ id: ALERT_ID }] }).catch(() => {});
-  state.alert = null;
-  if (msg) toast(msg);
-  tickUi(true);
-}
-function checkAlert() {
-  const a = state.alert;
-  if (!a) return;
-  const j = state.journeyById.get(a.jid), st = state.stations[a.st];
-  const i = j ? j.callIdx[a.st] : null;
-  if (!j || i == null || !st) { if (nowS() > a.arr + 60) cancelAlert(); return; }
-  const w = walkFor(st);
-  a.arr = j.calls[i].arr;
-  if (w) a.leaveAt = a.arr - w.sec - state.margin;
-  if (Native.notif && a.scheduledAt != null && Math.abs(a.leaveAt - a.scheduledAt) > 20 && a.leaveAt > nowS() + 5) scheduleNative(a);
-  if (nowS() >= a.leaveAt) {
-    haptic('orange');
-    toast(`Partez maintenant : tram ${a.line} vers ${a.dest}, à quai à ${fmtClock(a.arr)}`, true);
-    if (!Native.notif && a.granted && document.hidden && 'Notification' in window) {
-      try { new Notification(`Partez maintenant : tram ${a.line}`, { body: `Vers ${a.dest}, à quai à ${a.stName} vers ${fmtClock(a.arr)}.`, tag: 'tbm-alert' }); } catch (_) { /* navigateur sans notifications */ }
-    }
-    state.alert = null;
-  }
-}
-setInterval(checkAlert, 3000);
-
-/* ---------- Partager, Plans ---------- */
-async function shareTrip() {
-  const p = lastCtx && lastCtx.primary;
-  if (!p) return;
-  const text = `Je prends le tram ${p.line} vers ${p.dest} à ${p.S.name}, à quai vers ${fmtClock(p.tArr)}.`;
-  try {
-    if (Native.share) await Native.share.share({ title: 'Mon tram', text });
-    else if (navigator.share) await navigator.share({ title: 'Mon tram', text });
-    else { await navigator.clipboard.writeText(text); toast('Copié dans le presse-papiers'); }
-  } catch (_) { /* partage annulé */ }
-}
-function openMaps() {
-  const st = lastCtx && lastCtx.board;
-  if (!st) return;
-  const q = `daddr=${st.ll[0].toFixed(6)},${st.ll[1].toFixed(6)}&dirflg=w`;
-  const url = Native.platform === 'ios' ? `maps://?${q}` : `https://maps.apple.com/?${q}`;
-  window.open(url, '_blank');
 }
 
 /* ---------- Infos réseau du jour ---------- */
@@ -1401,8 +1520,9 @@ function maybeDailyDigest() {
 }
 
 /* ---------- Menu (feuille iOS) ---------- */
+function closeDlg(d) { if (!d) return; if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); }
 function openSheet(sel) { const d = $(sel); if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', ''); tickUi(true); }
-$$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
+$$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) closeDlg(d); }));
 function renderMenu(ctx) {
   if (!$('#menu').open) return;
   const favs = favorites();
@@ -1437,8 +1557,7 @@ function renderMenu(ctx) {
 /* ---------- Présentation au premier lancement ---------- */
 const ONB = [
   { icon: 'tram', t: 'Attrapez votre tram', d: 'Tram Radar trouve la station la plus proche et vous dit, en temps réel, si vous aurez le prochain tram dans votre direction.', a: [['next', 'Continuer']] },
-  { icon: 'locate', t: 'Votre position', d: 'Elle sert à trouver votre station et à calculer votre trajet à pied. Elle reste sur votre appareil : seul le calcul d\u2019itinéraire piéton l\u2019envoie, sans compte ni historique.', a: [['loc', 'Autoriser la localisation'], ['next', 'Plus tard', 'ghost']] },
-  { icon: 'bell', t: 'Alerte de départ', d: 'Touchez « Me prévenir » : l\u2019app vous notifie au moment de partir, recalculé en direct si le tram prend du retard.', a: [['notif', 'Activer les notifications'], ['done', 'Plus tard', 'ghost']] }
+  { icon: 'locate', t: 'Votre position', d: 'Elle sert à trouver votre station et à calculer votre trajet à pied. Elle reste sur votre appareil : seul le calcul d\u2019itinéraire piéton l\u2019envoie, sans compte ni historique.', a: [['loc', 'Autoriser la localisation'], ['done', 'Plus tard', 'ghost']] }
 ];
 let onbStep = 0;
 function renderOnb() {
@@ -1449,11 +1568,10 @@ function renderOnb() {
 }
 function showOnb() { onbStep = 0; renderOnb(); $('#onb').classList.remove('hidden'); }
 function finishOnb() { store.set('tbm-onb', 1); $('#onb').classList.add('hidden'); tickUi(true); }
-$('#onb').addEventListener('click', async e => {
+$('#onb').addEventListener('click', e => {
   const b = e.target.closest('[data-onb]'); if (!b) return;
   const k = b.dataset.onb;
-  if (k === 'loc') { startGps(); onbStep++; renderOnb(); }
-  else if (k === 'notif') { await askNotifPermission(); finishOnb(); }
+  if (k === 'loc') { startGps(); finishOnb(); }
   else if (k === 'done') finishOnb();
   else { onbStep++; renderOnb(); }
 });
@@ -1474,7 +1592,7 @@ function tickUi(force) {
   if (pv && lastVerdict && pv.j === lastVerdict.j && pv.v !== lastVerdict.v) haptic(pv.v);
   lastVerdict = pv;
   setRoles(ctx.board ? ctx.board.id : null, null);
-  renderStation(ctx); renderDir(ctx); renderVerdict(ctx); renderAlert(ctx); renderBottom(ctx); renderMini(ctx); renderMenu(ctx);
+  renderStation(ctx); renderDir(ctx); renderVerdict(ctx); renderAlert(ctx); renderBottom(); renderMini(ctx); renderMenu(ctx); renderDirSheet();
   updateTripLayers(ctx);
   refreshPopup();
   renderLive();
@@ -1502,18 +1620,16 @@ function onAction(e) {
     else if (a === 'dir-prev') stepDir(-1);
     else if (a === 'dir-next') stepDir(1);
     else if (a === 'fav') toggleFav(lastCtx);
-    else if (a === 'alert') toggleAlert();
-    else if (a === 'maps') openMaps();
-    else if (a === 'share') shareTrip();
+    else if (a === 'dirsheet') openSheet('#dirSheet');
     else if (a === 'menu') openSheet('#menu');
-    else if (a === 'close') act.closest('dialog').close();
-    else if (a === 'digest') { if ($('#menu').open) $('#menu').close(); openDigest(); }
+    else if (a === 'close') closeDlg(act.closest('dialog'));
+    else if (a === 'digest') { if ($('#menu').open) closeDlg($('#menu')); openDigest(); }
     else if (a === 'follow') setFollow(!state.follow);
     else if (a === 'view-ui') setView('ui');
-    else if (a === 'onboarding') { $('#menu').close(); showOnb(); }
+    else if (a === 'onboarding') { closeDlg($('#menu')); showOnb(); }
     else if (a === 'retry') { toast('Nouvelle tentative…'); boot(true); }
-    else if (a === 'settings') { $$('dialog[open]').forEach(d => d.close()); openCfg(); }
-    else if (a === 'cfg-close') $('#cfg').close();
+    else if (a === 'settings') { $$('dialog[open]').forEach(closeDlg); openCfg(); }
+    else if (a === 'cfg-close') closeDlg($('#cfg'));
     else if (a === 'cfg-save') saveCfg($('#proxyInput').value.trim());
     else if (a === 'cfg-clear') { $('#proxyInput').value = ''; saveCfg(''); }
     else if (a === 'update') applyUpdate();
@@ -1524,11 +1640,13 @@ function onAction(e) {
   const v = e.target.closest('#navSeg [data-view]');
   if (v) { setView(v.dataset.view); return; }
   const pick = e.target.closest('[data-pick]');
-  if (pick) { state.dir = pick.dataset.pick; state.dirTouched = true; store.set('tbm-dir', state.dir); $('#menu').close(); tickUi(true); return; }
+  if (pick) { chooseDir(pick.dataset.pick, false); closeDlg($('#menu')); tickUi(true); return; }
+  const sd = e.target.closest('[data-seldir]');
+  if (sd) { chooseDir(sd.dataset.seldir, sd.dataset.remote === '1'); closeDlg($('#dirSheet')); tickUi(true); return; }
   const fav = e.target.closest('[data-fav]');
   if (fav) {
     const f = favorites()[+fav.dataset.fav];
-    if (f && state.stations[f.st]) { state.fromId = f.st; state.dir = f.key; state.dirTouched = true; $('#menu').close(); tickUi(true); }
+    if (f && state.stations[f.st]) { state.fromId = f.st; state.dir = f.key; state.dirRemote = false; state.dirTouched = true; closeDlg($('#menu')); tickUi(true); }
     return;
   }
   const m = e.target.closest('[data-margin]');
