@@ -27,7 +27,6 @@
       <button type="button" role="tab" data-view="ui" aria-selected="true">Tram</button>
       <button type="button" role="tab" data-view="map" aria-selected="false">Carte</button>
     </div>
-    <button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button>
     <button id="menuBtn" type="button" class="navbtn" data-act="menu" aria-label="Menu" data-icon="more" data-size="24"></button>
   </header>
 
@@ -41,14 +40,18 @@
   </section>
 
   <main id="ui" aria-label="Votre tram">
-    <section id="uStation" class="u-card"></section>
-    <section id="uDir" class="u-card u-dir" tabindex="0" aria-label="Choix de la direction, flèches gauche et droite"><div id="uDirInner" class="u-dir-inner"></div></section>
+    <section id="uStation" class="u-sec u-station">
+      <div id="uStationInfo" class="u-st"></div>
+      <button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button>
+    </section>
+    <section id="uDir" class="u-sec u-dir" tabindex="0" aria-label="Choix de la direction, flèches gauche et droite"><div id="uDirInner" class="u-dir-inner"></div></section>
     <section id="uVerdict" class="u-verdict"></section>
     <div id="srVerdict" class="sr-only" aria-live="polite"></div>
     <section id="uAlert"></section>
-    <section class="u-card u-bottom">
-      <div id="uSpeed"></div>
+    <section class="u-sec u-bottom">
       <div id="cadence" class="seg seg-sm full" role="radiogroup" aria-label="Votre allure"></div>
+      <div id="uSpeed"></div>
+      <button id="laBtn" type="button" class="u-la" data-act="la" aria-pressed="false" hidden><span data-icon="lock" data-size="16"></span><span class="lbl">Suivre sur l’écran verrouillé</span></button>
     </section>
   </main>
 </div>

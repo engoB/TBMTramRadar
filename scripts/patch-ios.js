@@ -15,3 +15,9 @@ if (!keys.every(k => plist.includes(`<key>${k}</key>`))) {
 }
 fs.copyFileSync(path.join(__dirname, '..', 'ios-config', 'PrivacyInfo.xcprivacy'), path.join(app, 'PrivacyInfo.xcprivacy'));
 console.log('PrivacyInfo.xcprivacy copié (à ajouter à la cible App dans Xcode s\'il n\'apparaît pas)');
+// Code natif du widget et de la Live Activity (voir IOS_WIDGET.md pour l'ajout aux cibles Xcode)
+const src = path.join(__dirname, '..', 'ios-native');
+for (const f of ['App/TramActivityPlugin.swift', 'App/MainViewController.swift', 'Shared/TramShared.swift']) {
+  fs.copyFileSync(path.join(src, f), path.join(app, path.basename(f)));
+}
+console.log('Plugin TramActivity copié dans ios/App/App');

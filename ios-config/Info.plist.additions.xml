@@ -8,3 +8,5 @@
 	<string>UIStatusBarStyleDarkContent</string>
 	<key>UIRequiresFullScreen</key>
 	<true/>
+	<key>NSSupportsLiveActivities</key>
+	<true/>

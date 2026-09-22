@@ -3,6 +3,17 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.2.0
+- Interface épurée dans l'esprit de la présentation : fond blanc, titres nets, sections aérées.
+- Plus aucun chevauchement dans le bloc verdict ; messages d'info trafic affichés en entier.
+- Itinéraire numéroté quand la direction n'est pas desservie : quel tram prendre, où descendre, quelle correspondance.
+- Les directions exceptionnelles (courses de dépôt, données erronées) ne s'affichent plus : une direction doit revenir plusieurs jours.
+- « Info trafic ligne X » présentée comme une information, sans l'affirmer comme cause.
+- Suppression du réglage de marge : calcul au plus juste, en temps réel.
+- Menu : état du temps réel (plus de faux « réglage »), dépannage de connexion seulement en cas de problème.
+- Rames plus grandes sur la carte.
+- App iOS : widget « Mon tram » et Live Activity (écran verrouillé, Dynamic Island).
+
 ## 5.1.0
 - Toutes les directions du réseau : si votre station ne dessert pas celle voulue, l'app indique le tram le plus rapide (à pied jusqu'à une autre station, ou avec une correspondance) et les étapes.
 - « Autre direction » : liste de tous les terminus, par ligne.

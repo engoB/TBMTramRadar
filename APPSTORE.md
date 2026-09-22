@@ -5,10 +5,9 @@ et ce qu'il vous reste à faire (compte, captures, fiche).
 
 ## 1. Règle 4.2 « Minimum Functionality » : ce que l'app apporte
 
-> **État en version 5.1** : l'alerte de départ, le partage et l'ouverture dans Plans ont été retirés
-> de l'interface pour garder l'app centrée sur le temps réel. Avant une soumission, il faudra
-> renforcer le dossier 4.2 (pistes : widget d'écran d'accueil, Live Activity sur l'écran verrouillé,
-> raccourcis Siri). Le tableau ci-dessous décrit l'ensemble des fonctions natives prévues.
+> **État en version 5.2** : le widget « Mon tram » et la Live Activity (écran verrouillé, Dynamic Island)
+> sont les arguments natifs principaux (voir IOS_WIDGET.md). L'alerte de départ, le partage et Plans
+> ont été retirés de l'interface.
 
 
 Apple refuse les apps qui ne sont qu'un site web emballé. Tram Radar est construit comme une app
