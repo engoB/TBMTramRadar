@@ -33,24 +33,21 @@
   <section id="mapWrap" aria-label="Carte et suivi du trajet">
     <div id="map" role="application" aria-label="Carte du tramway de Bordeaux"></div>
     <div class="map-tools">
-      <button id="followBtn" type="button" class="maptool" data-act="follow" aria-pressed="false"><span data-icon="walk" data-size="18"></span><span class="lbl">Suivre</span></button>
+      <button id="followBtn" type="button" class="maptool" data-act="follow" aria-pressed="false" aria-label="Suivre ma position"><span data-icon="walk" data-size="18"></span><span class="lbl">Suivre</span></button>
       <button id="recenter" type="button" class="maptool icon" aria-label="Recentrer sur moi et ma station" data-icon="locate" data-size="20"></button>
     </div>
-    <button id="mini" type="button" class="mini" data-act="view-ui" aria-label="Revenir à la vue Tram"></button>
+    <button id="mini" type="button" class="mini2" data-act="view-ui" aria-label="Revenir à la vue Tram"></button>
   </section>
 
   <main id="ui" aria-label="Votre tram">
-    <section id="uStation" class="u-sec u-station">
-      <div id="uStationInfo" class="u-st"></div>
-      <button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button>
-    </section>
-    <section id="uDir" class="u-sec u-dir" tabindex="0" aria-label="Choix de la direction, flèches gauche et droite"><div id="uDirInner" class="u-dir-inner"></div></section>
-    <section id="uVerdict" class="u-verdict"></section>
+    <div class="u-where"><span id="uStationInfo"></span><button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button></div>
+    <section id="uDir" class="u-dir" tabindex="0" aria-label="Direction : flèches gauche et droite"><div id="uDirInner" class="u-dir-inner"></div></section>
+    <section id="uVerdict" class="u-center" aria-live="off"></section>
     <div id="srVerdict" class="sr-only" aria-live="polite"></div>
-    <section id="uAlert"></section>
-    <section class="u-sec u-bottom">
+    <div id="uAlert"></div>
+    <section class="u-foot">
       <div id="cadence" class="seg seg-sm full" role="radiogroup" aria-label="Votre allure"></div>
-      <div id="uSpeed"></div>
+      <p id="uSpeed" class="u-speed"></p>
       <button id="laBtn" type="button" class="u-la" data-act="la" aria-pressed="false" hidden><span data-icon="lock" data-size="16"></span><span class="lbl">Suivre sur l’écran verrouillé</span></button>
     </section>
   </main>
@@ -67,7 +64,7 @@
 
 <dialog id="menu" class="dd" aria-label="Menu">
   <div class="grabber" aria-hidden="true"></div>
-  <div class="dd-head"><b>Tram Radar</b><button type="button" class="dd-done" data-act="close">OK</button></div>
+  <div class="dd-head"><b>Réglages</b><button type="button" class="dd-done" data-act="close">OK</button></div>
   <div id="menuBody" class="dd-body"></div>
 </dialog>
 

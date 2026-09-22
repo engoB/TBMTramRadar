@@ -147,7 +147,7 @@ const state = {
   lineMeta: Object.fromEntries(LINE_IDS.map(l => [l, { color: CFG.lines[l].color, shapes: null }])),
   user: null, mode: 'gps', lastGps: null, gps: 'search', firstFix: true,
   activeLines: new Set(savedLines.length ? savedLines : LINE_IDS),
-  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirRemote: false, dirTouched: false, feedHorizon: 0, liveKeys: null, view: store.get('tbm-view') || 'ui', follow: false, margin: 0, liveActivity: null, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
+  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirRemote: false, dirTouched: false, feedHorizon: 0, liveKeys: null, view: store.get('tbm-view') || 'ui', follow: false, margin: 0, liveActivity: null, far: null, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
   recents: store.get('tbm-recents') || [],
   cadence: store.get('tbm-cadence') || 'normal',
   bannerDismissed: { far: false, nogps: false }, bannerKind: null,
@@ -1074,10 +1074,13 @@ function realSpeed() {
 }
 function fitTrip(animate) {
   if (!state.user) return;
+  const sz = map.getSize();
+  if (!sz.x || !sz.y) { state.needFit = true; return; }
   const pts = [state.user.ll];
   if (lastCtx && lastCtx.board) pts.push(lastCtx.board.ll);
   if (pts.length === 1) { map.setView(pts[0], 16, { animate }); return; }
-  map.flyToBounds(L.latLngBounds(pts), { paddingTopLeft: [28, 90], paddingBottomRight: [28, 150], maxZoom: 17, duration: animate ? .8 : 0 });
+  const opt = { paddingTopLeft: [40, 110], paddingBottomRight: [40, 170], maxZoom: 16 };
+  if (animate) map.flyToBounds(L.latLngBounds(pts), { ...opt, duration: .8 }); else map.fitBounds(L.latLngBounds(pts), opt);
 }
 
 /* =========================================================
@@ -1156,7 +1159,7 @@ function onErr(err) {
 function checkFar(ll) {
   const d = hav(ll, CENTER);
   if (d > METRO_RADIUS) { showBanner('far', d); return true; }
-  if (state.bannerKind === 'far') hideBanner();
+  state.far = null;
   return false;
 }
 function renderGps() {
@@ -1180,6 +1183,10 @@ $('#gps').addEventListener('click', () => {
   else toast('Recherche du signal GPS en cours…');
 });
 function showBanner(kind, info) {
+  // Écran épuré : pas de bandeau. L'absence de position et l'éloignement s'affichent au centre de l'écran.
+  if (kind === 'far') state.far = info;
+  return;
+  // eslint-disable-next-line no-unreachable
   if (state.bannerDismissed[kind] || state.mode === 'sim' || (kind === 'nogps' && state.mode === 'manual')) return;
   state.bannerKind = kind;
   let msg;
@@ -1245,7 +1252,7 @@ function setView(v) {
   document.body.dataset.view = v;
   $$('#navSeg [data-view]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === v)));
   haptic('select');
-  if (v === 'map') setTimeout(() => { map.invalidateSize(); fitTrip(false); }, 60);
+  if (v === 'map') { map.invalidateSize(); state.needFit = true; setTimeout(() => { map.invalidateSize(); fitTrip(false); }, 80); }
   tickUi(true);
 }
 function setFollow(on) {
@@ -1300,12 +1307,9 @@ function simButtons() {
 /* 1. Où je suis */
 function renderStation(ctx) {
   const el = $('#uStationInfo');
-  if (!ctx.board) return setHTML(el, `<div class="u-st-main"><span class="u-eyebrow">Votre station</span><b>Position inconnue</b></div>`);
-  const w = ctx.boardW, st = ctx.board;
-  const eyebrow = ctx.forced ? 'Station choisie' : 'Station la plus proche';
-  setHTML(el, `<div class="u-st-main"><span class="u-eyebrow">${eyebrow}</span><b>${esc(st.name)}</b></div>
-    <div class="u-walk">${w ? `<b>${fmtWalk(w.sec)}</b><small>${fmtDist(w.dist)}</small>` : ''}</div>
-    ${ctx.forced ? '<button type="button" class="u-link" data-act="from-clear">La plus proche</button>' : ''}`);
+  if (!ctx.board) return setHTML(el, 'Position inconnue');
+  const w = ctx.boardW;
+  setHTML(el, `<b>${esc(ctx.board.name)}</b>${w ? `<span> · ${fmtWalk(w.sec)} à pied</span>` : ''}${ctx.forced ? ' <button type="button" class="u-link" data-act="from-clear">(la plus proche)</button>' : ''}`);
 }
 
 /* 2. Dans quel sens */
@@ -1340,22 +1344,17 @@ function stepDir(delta) {
 function renderDir(ctx) {
   const el = $('#uDirInner');
   const dirs = ctx.dirs || [];
-  if (!ctx.board || (!dirs.length && !ctx.remote)) return setHTML(el, `<div class="u-dir-empty">Aucune direction connue ici<button type="button" class="u-link" data-act="dirsheet">Choisir une direction</button></div>`);
-  const s = ctx.sel;
+  if (!ctx.board) return setHTML(el, '');
+  if (!dirs.length && !ctx.remote) return setHTML(el, `<button type="button" class="u-link big" data-act="dirsheet">Choisir une direction</button>`);
+  const s = ctx.sel, can = dirs.length > 1 || ctx.remote;
   const i = ctx.remote ? -1 : dirs.findIndex(d => d.key === s.key);
-  const fav = !ctx.remote && isFav(ctx.board.id, s.key);
-  const can = dirs.length > 1 || ctx.remote;
-  const pos = ctx.remote ? '<span class="u-tag">Pas desservie ici</span>'
-    : dirs.length > 1 && dirs.length <= 8 ? `<span class="u-dots" aria-hidden="true">${dirs.map((d, k) => `<i class="${k === i ? 'on' : ''}${d.g ? '' : ' off'}" style="--c:${lineColor(d.line)}"></i>`).join('')}</span>`
-    : dirs.length > 8 ? `<span class="u-count">${i + 1} sur ${dirs.length}</span>` : '';
   setHTML(el, `
-    <button type="button" class="u-arrow" data-act="dir-prev" aria-label="Direction précédente" ${can ? '' : 'disabled'}>${svg('chevL', 28)}</button>
+    <button type="button" class="u-arrow" data-act="dir-prev" aria-label="Direction précédente" ${can ? '' : 'disabled'}>${svg('chevL', 30)}</button>
     <div class="u-dir-cur" aria-label="Ligne ${esc(s.line)} vers ${esc(s.dest)}">
       <div class="u-dir-line">${badge(s.line)}<span id="uDirName" class="u-dir-name">${esc(s.dest)}</span></div>
-      <div class="u-dir-bot">${pos}<button type="button" class="u-link" data-act="dirsheet">Autre direction</button>
-        ${ctx.remote ? '' : `<button type="button" class="u-fav" data-act="fav" aria-pressed="${fav}" aria-label="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${svg(fav ? 'starFill' : 'star', 18)}</button>`}</div>
+      <div class="u-dir-sub">${ctx.remote ? 'Pas desservie ici · ' : dirs.length > 1 ? `${i + 1} sur ${dirs.length} · ` : ''}<button type="button" class="u-link" data-act="dirsheet">autre direction</button></div>
     </div>
-    <button type="button" class="u-arrow" data-act="dir-next" aria-label="Direction suivante" ${can ? '' : 'disabled'}>${svg('chevR', 28)}</button>`);
+    <button type="button" class="u-arrow" data-act="dir-next" aria-label="Direction suivante" ${can ? '' : 'disabled'}>${svg('chevR', 30)}</button>`);
 }
 function renderDirSheet() {
   const d = $('#dirSheet');
@@ -1371,104 +1370,92 @@ function renderDirSheet() {
   const sel = ctx.sel && ctx.sel.key;
   setHTML($('#dirBody'), lines.length ? lines.map(l => `<h3>${badge(l, 'sm')} Ligne ${esc(l)}</h3><div class="group">${byLine[l].sort((a, b) => a.dest.localeCompare(b.dest, 'fr')).map(t => `
       <button type="button" class="row" data-seldir="${esc(t.key)}" data-remote="${here.has(t.key) ? '0' : '1'}">
-        <span class="row-t">${esc(t.dest)}<small>${here.has(t.key) ? 'Desservie à votre station' : 'Itinéraire avec correspondance ou à pied'}</small></span>
+        <span class="row-t">${esc(t.dest)}<small>${here.has(t.key) ? 'Desservie à votre station' : 'Avec correspondance ou à pied'}</small></span>
         ${t.key === sel ? `<span class="row-check">${svg('check', 18)}</span>` : svg('chevR', 16)}</button>`).join('')}</div>`).join('')
     : '<p class="muted">Les directions apparaissent dès que le temps réel est chargé.</p>');
 }
 
-/* 3. Est-ce que je l'ai */
-function race(p, now) {
-  const walk = p.w ? p.w.sec : null;
-  const span = Math.max(p.depIn, walk || 0, 60) * 1.08 + 10;
-  const X = t => clamp(t / span * 100, 4, 96);
-  const a = X(Math.max(0, p.arrIn)), d = X(p.depIn), m = walk != null ? X(walk) : null;
-  const lab = (x, html) => `<span class="rl ${x < 20 ? 'al' : x > 80 ? 'ar' : ''}" style="left:${x.toFixed(1)}%">${html}</span>`;
-  return `<div class="race2" style="--c:${lineColor(p.line)}" aria-hidden="true">
-    <div class="race2-row">${lab(a, `Tram ${p.arrIn > 0 ? fmtClockS(p.tArr) : 'à quai'}`)}</div>
-    <div class="race2-trk"><span class="race2-quai" style="left:${a.toFixed(1)}%;width:${Math.max(1.5, d - a).toFixed(1)}%"></span>
-      <span class="race2-tram" style="left:${a.toFixed(1)}%">${esc(p.line)}</span>
-      ${m != null ? `<span class="race2-me" style="left:${m.toFixed(1)}%">${svg('walk', 15)}</span>` : ''}</div>
-    <div class="race2-row">${m != null ? lab(m, `Vous ${fmtClockS(now + walk)}`) : ''}</div>
-  </div>`;
-}
+/* 3. Est-ce que je l'ai : un anneau, un titre, une phrase */
 function whereText(p, now) {
   const pos = tramPos(p.j, now), c = p.j.calls;
-  if (!pos) return `Part du terminus à ${fmtClock(c[0].dep)}`;
-  if (pos.dwell && pos.at === p.i) return 'À quai maintenant';
+  if (!pos) return `part du terminus à ${fmtClock(c[0].dep)}`;
+  if (pos.dwell && pos.at === p.i) return 'à quai maintenant';
   const n = pos.dwell ? p.i - pos.at : p.i - pos.next;
-  if (n <= 0) return 'Arrive à la station';
-  return `${n} arrêt${n > 1 ? 's' : ''} avant la station`;
+  if (n <= 0) return 'arrive à la station';
+  return `à ${n} arrêt${n > 1 ? 's' : ''}`;
 }
-function verdictWords(ctx) {
-  const p = ctx.primary;
-  if (!p || !p.w) return null;
-  const v = p.v;
-  if (v === 'red') {
-    const n = ctx.nextCatch;
-    return { head: 'Trop tard', sub: n ? `Le suivant arrive dans <b>${cdSpan(n, 'min')}</b> : ${n.v === 'green' ? 'celui-là, vous l\u2019avez' : 'jouable en pressant le pas'}.` : 'Aucun tram attrapable parmi les passages annoncés.' };
-  }
-  const leaveAt = p.tArr - p.w.sec, slack = leaveAt - ctx.now;
-  if (v === 'green') return { head: 'Vous l\u2019avez', sub: slack > 60 ? `Partez à <b>${fmtClock(leaveAt)}</b>, dans ${fmtMS(slack)}.` : '<b>Partez maintenant</b>, sans courir.', leaveAt };
-  return { head: 'Pressez le pas', sub: `<b>Partez maintenant</b>, au moins ${fmtKmh(p.w.dist / Math.max(1, p.depIn - CFG.walk.platformSec) * 3.6)}.`, leaveAt };
+function ring(cls, inner, frac) {
+  const C = 2 * Math.PI * 54;
+  const off = frac == null ? 0 : C * (1 - clamp(frac, 0, 1));
+  return `<div class="ring ${cls}"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="ring-bg" cx="60" cy="60" r="54"/><circle class="ring-fg" cx="60" cy="60" r="54" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg><div class="ring-in">${inner}</div></div>`;
 }
-/* Itinéraire quand la direction n'est pas desservie ici : quel tram, où descendre, quelle correspondance */
-function planSteps(ctx) {
-  const p = ctx.primary, rows = [];
-  let n = 1;
-  if (p.w && p.S.id !== ctx.board.id) rows.push(`<li><span class="u-step">${n++}</span><span>${svg('walk', 15)} Marchez ${fmtWalk(p.w.sec)} jusqu\u2019à <b>${esc(p.S.name)}</b></span></li>`);
-  rows.push(`<li><span class="u-step">${n++}</span><span>Prenez le ${badge(p.line, 'sm')} vers ${esc(p.dest)}, à ${fmtClock(p.tArr)}</span></li>`);
+function center(cls, ringHTML, title, text, extra = '') {
+  const el = $('#uVerdict');
+  el.className = 'u-center ' + cls;
+  setHTML(el, `${ringHTML}<h2 class="u-title">${title}</h2><p class="u-text">${text}</p>${extra}`);
+}
+function planText(ctx) {
+  const p = ctx.primary, steps = [];
+  if (p.w && p.S.id !== ctx.board.id) steps.push(`Marchez jusqu\u2019à <b>${esc(p.S.name)}</b>`);
+  steps.push(`Prenez le ${badge(p.line, 'sm')} à ${fmtClock(p.tArr)}`);
   if (p.transfer) {
-    const t = p.transfer, stops = p.j.callIdx[t.T] - p.i, gap = t.tDep2 - t.tArrT;
-    rows.push(`<li><span class="u-step">${n++}</span><span>Descendez à <b>${esc(stName(t.T))}</b>, ${stops} arrêt${stops > 1 ? 's' : ''} plus loin, à ${fmtClock(t.tArrT)}</span></li>`);
-    rows.push(`<li><span class="u-step">${n++}</span><span>Prenez le ${badge(t.line, 'sm')} vers <b>${esc(t.dest2)}</b> à ${fmtClock(t.tDep2)}${gap < 180 ? ' <em>correspondance serrée</em>' : `, ${Math.round(gap / 60)} min pour changer`}</span></li>`);
+    steps.push(`Descendez à <b>${esc(stName(p.transfer.T))}</b>`);
+    steps.push(`Prenez le ${badge(p.transfer.line, 'sm')} à ${fmtClock(p.transfer.tDep2)}${p.transfer.tDep2 - p.transfer.tArrT < 180 ? ' (serré)' : ''}`);
   }
-  return `<ol class="u-plan2">${rows.join('')}</ol>`;
-}
-function renderOff(el, ctx) {
-  const o = ctx.off, s = ctx.sel;
-  el.className = 'u-verdict v-off';
-  const info = o.reason ? `<div class="u-reason"><span class="u-eyebrow">Info trafic ligne ${esc(s.line)}</span>${o.reason.title ? `<b>${esc(o.reason.title)}</b>` : ''}<p>${esc(o.reason.body)}</p></div>` : '';
-  let alt = '';
-  if (!ctx.remote && s) {
-    const t = termOf(s.key);
-    const opts = t && t.destSt ? planTo(t.destSt, ctx.now) : [];
-    const a = opts.find(x => x.v && x.v !== 'red') || opts[0];
-    if (a) alt = `<div class="u-alt"><span class="u-eyebrow">Autre solution vers ${esc(s.dest)}</span>${a.S.id !== ctx.board.id ? `Marchez jusqu\u2019à <b>${esc(a.S.name)}</b>, puis ` : ''}${badge(a.line, 'sm')} vers ${esc(a.dest)} dans <b>${cdSpan(a, 'min')}</b>${a.transfer ? `, puis ${badge(a.transfer.line, 'sm')} à ${esc(stName(a.transfer.T))}` : ''}.</div>`;
-  }
-  setHTML(el, `<div class="u-v-head"><strong>Plus de tram vers ${esc(s.dest)}</strong></div>
-    <div class="u-v-sub">Aucun passage n\u2019est annoncé pour le moment${o.reason ? '.' : ' et TBM ne publie aucune info trafic : fin de service ou interruption.'}</div>
-    ${info}${alt}`);
-  $('#srVerdict').textContent = `Plus de tram vers ${s.dest}.`;
+  return `<ol class="u-steps">${steps.map(s => `<li>${s}</li>`).join('')}</ol>`;
 }
 function renderVerdict(ctx) {
-  const el = $('#uVerdict');
-  const box = (cls, h, t, extra = '') => { el.className = 'u-verdict ' + cls; setHTML(el, `<div class="u-v-head"><strong>${h}</strong></div><div class="u-v-sub">${t}</div>${extra}`); };
+  const gray = (icon, title, text, extra) => center('v-none', ring('v-none', svg(icon, 44)), title, text, extra);
   if (state.api === 'error' && !state.journeys.length) {
     const blocked = state.apiErrorKind === 'blocked' || state.apiErrorKind === 'proxy';
-    return box('v-red', 'Temps réel indisponible', `${esc(state.apiError)}.`, `<div class="u-acts"><button class="btn" type="button" data-act="retry">Réessayer</button>${blocked ? '<button class="btn ghost" type="button" data-act="settings">Connexion</button>' : ''}</div>`);
+    return gray('wifi', 'Temps réel indisponible', `${esc(state.apiError)}.`, `<div class="u-btns"><button class="btn big" type="button" data-act="retry">Réessayer</button>${blocked ? '<button class="btn big ghost" type="button" data-act="settings">Dépanner la connexion</button>' : ''}</div>`);
   }
-  if (!state.stopsReady || (!state.lastUpdate && state.api === 'loading')) return box('', 'Connexion…', 'Chargement des stations et des passages TBM.');
-  if (!ctx.board) return box('', 'Où êtes-vous ?', 'Autorisez la localisation, placez-vous sur la carte, ou simulez une position.', simButtons());
-  if (ctx.off) return renderOff(el, ctx);
-  const p = ctx.primary;
-  if (!p) return box('', 'Pas de départ', 'Rien d\u2019annoncé pour le moment.');
-  const now = ctx.now, vw = verdictWords(ctx);
-  el.className = 'u-verdict ' + (p.v ? 'v-' + p.v : '');
+  if (!state.stopsReady || (!state.lastUpdate && state.api === 'loading')) return gray('tram', 'Connexion…', 'Chargement des horaires en temps réel.');
+  if (state.far && state.mode === 'gps') {
+    let near = '';
+    if (state.lastGps) { let best = null, bd = Infinity; for (const st of stationList()) { const d = hav(state.lastGps.ll, st.ll); if (d < bd) { bd = d; best = st; } } if (best) near = ` Le tram le plus proche est ${esc(best.name)}, à ${fmtDist(bd)}.`; }
+    return gray('pin', 'Hors du réseau', `Vous êtes à ${Math.round(state.far / 1000)} km du centre de Bordeaux.${near}`, `<div class="u-btns"><button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Essayer depuis la place de la Bourse</button></div>`);
+  }
+  if (!ctx.board) return gray('locate', 'Où êtes-vous ?', 'Autorisez la localisation, ou placez-vous à la main dans la vue Carte.', `<div class="u-btns"><button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Essayer depuis la place de la Bourse</button></div>`);
+  if (ctx.off) {
+    const s = ctx.sel, o = ctx.off;
+    let alt = '';
+    if (!ctx.remote) {
+      const t = termOf(s.key), opts = t && t.destSt ? planTo(t.destSt, ctx.now) : [];
+      const a = opts.find(x => x.v && x.v !== 'red') || opts[0];
+      if (a) alt = `<p class="u-text"><b>Autre solution :</b> ${a.S.id !== ctx.board.id ? `à pied jusqu\u2019à ${esc(a.S.name)}, puis ` : ''}${badge(a.line, 'sm')} dans ${cdSpan(a, 'min')}${a.transfer ? `, correspondance ${badge(a.transfer.line, 'sm')} à ${esc(stName(a.transfer.T))}` : ''}.</p>`;
+    }
+    const reason = o.reason ? `<div class="u-note"><b>Info trafic ligne ${esc(s.line)}</b>${o.reason.title ? ` · ${esc(o.reason.title)}` : ''}<br>${esc(o.reason.body)}</div>` : '';
+    $('#srVerdict').textContent = `Plus de tram vers ${s.dest}.`;
+    return center('v-off', ring('v-off', svg('tram', 44)), `Plus de tram vers ${esc(s.dest)}`, o.reason ? 'Aucun passage annoncé pour le moment.' : 'Aucun passage annoncé et aucune info trafic : fin de service ou interruption.', alt + reason);
+  }
+  const p0 = ctx.primary;
+  if (!p0) return gray('tram', 'Pas de départ', 'Rien d\u2019annoncé pour le moment.');
+  const missed = p0.v === 'red' && ctx.nextCatch ? p0 : null;
+  const p = missed ? ctx.nextCatch : p0;
+  const now = ctx.now, v = p.v || 'none';
+  const inner = `${cdSpan(p)}<small>${p.arrIn > 0 ? 'avant le tram' : 'repart ' + fmtClock(p.tDep)}</small>`;
+  const frac = p.arrIn > 0 ? p.arrIn / 900 : 1;
   const isLast = ctx.last && Math.abs(ctx.last - p.tArr) < 1;
-  const next = !ctx.remote && ctx.g ? ctx.g.list.slice(1, 3) : [];
-  const meta = [esc(whereText(p, now))];
-  if (p.delay != null && Math.abs(p.delay) >= 60) meta.push(`${p.delay > 0 ? 'retard +' : 'avance '}${Math.abs(Math.round(p.delay / 60))} min`);
-  if (next.length) meta.push(`puis ${next.map(n => cdSpan(n, 'min')).join(', ')}`);
-  setHTML(el, `
-    ${isLast ? '<div class="u-lastpill">Dernier tram annoncé</div>' : ctx.last ? `<div class="u-lastpill soft">Dernier tram à ${fmtClock(ctx.last)}</div>` : ''}
-    <div class="u-v-head">
-      <strong>${vw ? vw.head : 'Placez-vous'}</strong>
-      <div class="u-cd">${cdSpan(p)}<small>${p.arrIn > 0 ? 'avant l\u2019arrivée' : 'repart ' + fmtClockS(p.tDep)}</small></div>
-    </div>
-    <div class="u-v-sub">${vw ? vw.sub : 'Placez votre repère pour savoir si vous l\u2019aurez.'}</div>
-    ${ctx.remote ? planSteps(ctx) : race(p, now)}
-    <div class="u-v-meta">${p.live ? '<span class="rt">temps réel</span>' : '<span class="rt theo">théorique</span>'}<span>${meta.join(' · ')}</span></div>`);
-  const sum = vw ? `${vw.head}. Tram ${p.line} vers ${p.dest}, ${p.arrIn > 0 ? 'dans ' + Math.max(1, Math.round(p.arrIn / 60)) + ' minutes' : 'à quai'}${isLast ? ', dernier tram annoncé' : ''}.` : '';
+  let title, text;
+  if (!p.w) { title = 'Tram ' + esc(p.line); text = `Arrive à quai à ${fmtClock(p.tArr)}. Placez-vous pour savoir si vous l\u2019aurez.`; }
+  else if (v === 'red') {
+    title = 'Trop tard';
+    text = 'Aucun tram attrapable parmi les passages annoncés.';
+  } else {
+    const leaveAt = p.tArr - p.w.sec, slack = leaveAt - now;
+    title = missed ? (v === 'green' ? 'Prenez le suivant' : 'Le suivant, en pressant le pas') : v === 'green' ? 'Vous l\u2019avez' : 'Pressez le pas';
+    const go = v === 'orange' ? 'Partez maintenant, d\u2019un bon pas.' : slack > 60 ? `Partez à <b>${fmtClock(leaveAt)}</b>. ${fmtWalk(p.w.sec)} de marche.` : 'Partez maintenant, sans courir.';
+    text = missed ? `Celui qui arrive dans ${cdSpan(missed, 'min')} est trop proche. ${go}` : go;
+  }
+  const bits = [whereText(p, now)];
+  if (p.delay != null && Math.abs(p.delay) >= 60) bits.push(`${p.delay > 0 ? 'retard +' : 'avance '}${Math.abs(Math.round(p.delay / 60))} min`);
+  if (!p.live) bits.push('horaire théorique');
+  const next = !ctx.remote && ctx.g ? ctx.g.all.filter(x => x.tArr > p.tArr).slice(0, 2) : [];
+  const detail = `<p class="u-meta">Tram ${esc(bits.join(', '))}${next.length ? ` · ensuite ${next.map(n => cdSpan(n, 'min')).join(', ')}` : ''}</p>`;
+  center('v-' + v, ring('v-' + v, inner, frac), title, text,
+    (isLast ? '<p class="u-last">Dernier tram annoncé</p>' : ctx.last ? `<p class="u-last soft">Dernier tram à ${fmtClock(ctx.last)}</p>` : '') + (ctx.remote ? planText(ctx) : '') + detail);
+  const sum = `${title}. Tram ${p.line} vers ${p.dest}, ${p.arrIn > 0 ? 'dans ' + Math.max(1, Math.round(p.arrIn / 60)) + ' minutes' : 'à quai'}.`;
   const sr = $('#srVerdict');
   if (sr.textContent !== sum) sr.textContent = sum;
 }
@@ -1478,23 +1465,29 @@ function renderAlert(ctx) {
   const impact = ctx.off ? [] : p ? relevantMessages([p.line, ...(p.transfer ? [p.transfer.line] : [])], [p.S.id]) : [];
   if (!impact.length) return setHTML(el, '');
   const m = impact[0];
-  setHTML(el, `<button type="button" class="u-impact" data-act="digest">${svg('alert', 18)}<span>${esc(m.title || m.body)}${impact.length > 1 ? ` <em>+${impact.length - 1}</em>` : ''}</span>${svg('chevR', 18)}</button>`);
+  setHTML(el, `<button type="button" class="u-alertline" data-act="digest">${svg('alert', 16)}<span>${esc(m.title || m.body)}</span></button>`);
 }
 function renderBottom() {
   const preset = CADENCES.find(c => c.id === state.cadence) || CADENCES[1];
-  setHTML($('#uSpeed'), state.realKmh
-    ? `<span class="spd on"><i></i>Calcul sur votre vitesse réelle : <b>${fmtKmh(state.realKmh)}</b></span>`
-    : `<span class="spd"><i></i>Calcul sur l\u2019allure « ${preset.label} »${state.mode === 'gps' ? ', puis sur votre vitesse réelle dès que vous marchez' : ''}</span>`);
+  const fem = { promenade: 'promenade', normal: 'normale', presse: 'pressée', course: 'course' }[preset.id];
+  setHTML($('#uSpeed'), state.realKmh ? `Calculé sur votre vitesse réelle : <b>${fmtKmh(state.realKmh)}</b>` : `Allure ${fem}${state.mode === 'gps' ? ', puis votre vitesse réelle en marchant' : ''}`);
 }
 function renderMini(ctx) {
   const el = $('#mini');
-  const p = ctx.primary, vw = verdictWords(ctx);
-  if (ctx.off) { el.className = 'mini v-off'; return setHTML(el, `${badge(ctx.sel.line)}<span class="mini-main"><b>Plus de tram</b><small>vers ${esc(ctx.sel.dest)}</small></span>`); }
-  el.className = 'mini ' + (p && p.v ? 'v-' + p.v : '');
-  if (!p) return setHTML(el, `<span class="mini-t">${ctx.board ? esc(ctx.board.name) + ' : pas de départ' : 'Où êtes-vous ?'}</span>`);
-  setHTML(el, `${badge(p.line)}<span class="mini-main"><b>${vw ? vw.head : 'Placez-vous'}</b><small>vers ${esc(p.dest)}, ${esc(p.S.name)}</small></span><span class="mini-cd">${cdSpan(p)}</span>`);
+  const p = ctx.primary && ctx.primary.v === 'red' && ctx.nextCatch ? ctx.nextCatch : ctx.primary;
+  const missed = p !== ctx.primary;
+  const title = ctx.off ? 'Plus de tram' : !p ? (ctx.board ? 'Pas de départ' : 'Où êtes-vous ?') : !p.w ? 'Tram ' + p.line : p.v === 'red' ? 'Trop tard' : missed ? 'Prenez le suivant' : p.v === 'green' ? 'Vous l\u2019avez' : 'Pressez le pas';
+  const v = ctx.off ? 'off' : p && p.v ? p.v : 'none';
+  el.className = 'mini2 v-' + v;
+  setHTML(el, `<span class="mini2-dot"></span><span class="mini2-main"><b>${title}</b><small>${ctx.sel ? `${esc(ctx.sel.line)} vers ${esc(ctx.sel.dest)}` : ''}</small></span>${p && !ctx.off ? `<span class="mini2-cd">${cdSpan(p)}</span>` : ''}`);
 }
 
+function verdictWords(ctx) {
+  const p = ctx.primary;
+  if (!p || !p.w) return null;
+  if (p.v === 'red') return { head: 'Trop tard' };
+  return { head: p.v === 'green' ? 'Vous l\u2019avez' : 'Pressez le pas', leaveAt: p.tArr - p.w.sec };
+}
 /* ---------- Widget et Live Activity (app iOS) ---------- */
 const spOfStation = id => Object.entries(state.sp2st).filter(([, s]) => s === id).map(([sp]) => sp);
 const epochMs = ts => Math.round((ts - clockOffset) * 1000);
@@ -1587,38 +1580,17 @@ function maybeDailyDigest() {
 function closeDlg(d) { if (!d) return; if (typeof d.close === 'function') d.close(); else d.removeAttribute('open'); }
 function openSheet(sel) { const d = $(sel); if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', ''); tickUi(true); }
 $$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) closeDlg(d); }));
-function renderMenu(ctx) {
+function renderMenu() {
   if (!$('#menu').open) return;
-  const favs = favorites();
-  let h = '';
-  if (ctx.board) {
-    h += `<h3>Passages à ${esc(ctx.board.name)}</h3><div class="group">`;
-    h += ctx.groups && ctx.groups.length ? ctx.groups.map(g => `<button type="button" class="row" data-pick="${esc(g.key)}">
-        ${badge(g.line, 'sm')}<span class="row-t">${esc(g.dest)}</span>
-        <span class="row-times">${g.list.map(p => `<span class="t ${p.v ? 'v-' + p.v : ''}">${cdSpan(p, 'min')}</span>`).join('')}</span></button>`).join('')
-      : '<div class="row"><span class="row-t muted">Aucun départ annoncé dans l\u2019heure</span></div>';
-    h += '</div>';
-  }
-  h += `<h3>Favoris</h3><div class="group">${favs.length ? favs.map((f, k) => `<button type="button" class="row" data-fav="${k}">${badge(f.line, 'sm')}<span class="row-t">${esc(f.name)}<small>vers ${esc(f.dest)}</small></span>${svg('chevR', 16)}</button>`).join('')
-    : '<div class="row"><span class="row-t muted">Touchez l\u2019étoile d\u2019une direction pour la présélectionner à cette station.</span></div>'}</div>`;
-  h += `<h3>Réseau</h3><div class="group">
-    <button type="button" class="row" data-act="digest">${svg('alert', 18)}<span class="row-t">Infos réseau du jour</span><span class="row-v">${state.messages.length}</span>${svg('chevR', 16)}</button>
-    <div class="row"><span class="row-t">Lignes affichées</span></div>
-    <div class="row chips-row">${LINE_IDS.map(l => `<button type="button" class="chip" data-line="${l}" style="--c:${lineColor(l)}" aria-pressed="${state.activeLines.has(l)}">${l}</button>`).join('')}</div></div>`;
-  const age = state.lastUpdate ? Math.round(nowS() - state.lastUpdate) : null;
-  const rtOk = state.lastUpdate && state.api !== 'error' && age < 120;
-  h += `<h3>Temps réel</h3><div class="group">
-    <div class="row"><span class="row-t">${rtOk ? 'Horaires TBM en direct' : 'Temps réel indisponible'}<small>${rtOk ? `Mis à jour il y a ${age} s, actualisé toutes les 30 s (10 s quand votre tram approche)` : esc(state.apiError || 'Connexion en cours')}</small></span><span class="row-dot ${rtOk ? 'ok' : 'ko'}"></span></div>
-    ${rtOk ? '' : '<button type="button" class="row" data-act="settings"><span class="row-t">Dépanner la connexion</span>' + svg('chevR', 16) + '</button>'}
-    <button type="button" class="row" data-act="check-update"><span class="row-t">Rechercher une mise à jour</span></button></div>`;
-  h += `<h3>À propos</h3><div class="group">
-    <a class="row" href="privacy.html" target="_blank" rel="noopener"><span class="row-t">Confidentialité</span>${svg('chevR', 16)}</a>
-    <button type="button" class="row" data-act="onboarding"><span class="row-t">Revoir la présentation</span></button>
-    ${CFG.support ? `<a class="row" href="${esc(CFG.support)}"><span class="row-t">Contact et assistance</span>${svg('chevR', 16)}</a>` : ''}
-    <div class="row"><span class="row-t muted">Tram Radar ${state.version ? 'v' + esc(state.version.version) : ''}. Horaires : TBM, Bordeaux Métropole (Licence Ouverte). Carte : © OpenStreetMap. Itinéraires : OSRM. Application indépendante, non affiliée à TBM.</span></div></div>`;
-  setHTML($('#menuBody'), h);
+  const n = state.messages.length;
+  setHTML($('#menuBody'), `
+    <h3>Lignes affichées</h3>
+    <div class="group"><div class="row chips-row">${LINE_IDS.map(l => `<button type="button" class="chip" data-line="${l}" style="--c:${lineColor(l)}" aria-pressed="${state.activeLines.has(l)}">${l}</button>`).join('')}</div></div>
+    <h3>Info trafic</h3>
+    <div class="group"><button type="button" class="row" data-act="digest"><span class="row-t">Infos réseau du jour</span><span class="row-v">${n}</span>${svg('chevR', 16)}</button></div>
+    <p class="menu-foot">Tram Radar ${state.version ? 'v' + esc(state.version.version) : ''} · horaires TBM en temps réel (Licence Ouverte) · carte © OpenStreetMap · application indépendante, non affiliée à TBM.<br>
+    <a href="privacy.html" target="_blank" rel="noopener">Confidentialité</a>${CFG.support ? ` · <a href="${esc(CFG.support)}">Assistance</a>` : ''}</p>`);
 }
-
 /* ---------- Présentation au premier lancement ---------- */
 const ONB = [
   { icon: 'tram', t: 'Attrapez votre tram', d: 'Tram Radar trouve la station la plus proche et vous dit, en temps réel, si vous aurez le prochain tram dans votre direction.', a: [['next', 'Continuer']] },
@@ -1657,7 +1629,7 @@ function tickUi(force) {
   if (pv && lastVerdict && pv.j === lastVerdict.j && pv.v !== lastVerdict.v) haptic(pv.v);
   lastVerdict = pv;
   setRoles(ctx.board ? ctx.board.id : null, null);
-  renderStation(ctx); renderDir(ctx); renderVerdict(ctx); renderAlert(ctx); renderBottom(); renderMini(ctx); renderMenu(ctx); renderDirSheet();
+  renderStation(ctx); renderDir(ctx); renderVerdict(ctx); renderAlert(ctx); renderBottom(); renderMini(ctx); renderMenu(); renderDirSheet();
   syncNative(ctx);
   updateTripLayers(ctx);
   refreshPopup();

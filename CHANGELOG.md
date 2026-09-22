@@ -3,6 +3,15 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.3.0
+- Écran Tram refait sur le modèle de la présentation : tout centré, sans cadres. Un anneau avec le compte à rebours, un grand titre, une phrase.
+- « Trop tard » montre directement le tram que vous pouvez prendre (« Prenez le suivant », « Partez à 08:31 »).
+- Itinéraire en 3 étapes numérotées quand la direction n'est pas desservie.
+- Plus de bandeaux : absence de position et éloignement affichés au centre.
+- Vue Carte : une seule pastille en bas, identique au verdict de la vue Tram.
+- Réglages réduits aux lignes affichées et aux infos réseau.
+- Correction : la carte pouvait se bloquer en passant à la vue Carte.
+
 ## 5.2.0
 - Interface épurée dans l'esprit de la présentation : fond blanc, titres nets, sections aérées.
 - Plus aucun chevauchement dans le bloc verdict ; messages d'info trafic affichés en entier.

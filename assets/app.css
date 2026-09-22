@@ -868,3 +868,95 @@
 
   @media (max-height:720px){ .u-st-main b{font-size:22px} .u-dir-name{font-size:20px} .u-arrow{height:50px} .u-verdict{padding:14px 16px} }
   @media (max-height:640px){ .race2{display:none} }
+
+  /* =================== v5.3 : le style de la présentation, partout =================== */
+  body,#app,#ui{background:#fff}
+  #nav{background:#fff;box-shadow:none;padding-bottom:4px}
+  body[data-view="map"] #nav{background:rgba(255,255,255,.9);box-shadow:none}
+  #nav .live{background:transparent;box-shadow:none;padding:0 2px;font-size:13px;font-weight:600;color:#8e8e93}
+  #nav .live[data-state="ok"]{color:#8e8e93}
+  #nav .live[data-state="ok"] .dot{box-shadow:none}
+  .navbtn{color:#8e8e93}
+
+  #ui{display:flex;flex-direction:column;align-items:stretch;gap:0;padding:6px calc(var(--safe-r) + 24px) calc(var(--safe-b) + 14px) calc(var(--safe-l) + 24px);text-align:center}
+  #ui > *{flex:none}
+
+  /* Où je suis : une ligne grise, comme un sous-titre */
+  .u-where{display:flex;align-items:center;justify-content:center;gap:8px;min-height:24px;font-size:15px;color:#8e8e93;padding-top:4px}
+  .u-where b{color:#3c3c43;font-weight:600}
+  .u-where .gps{display:none}
+  .u-where .gps[data-state="manual"],.u-where .gps[data-state="sim"],.u-where .gps[data-state="denied"],.u-where .gps[data-state="error"]{display:inline-flex;height:24px;padding:0 9px;border-radius:12px;background:#f2f2f7;border:0;box-shadow:none;font-size:12px;margin:0;max-width:none}
+  .u-link{font:inherit;color:var(--me);font-weight:600}
+  .u-link.big{font-size:17px;padding:14px}
+
+  /* Direction : une grande ligne, deux flèches */
+  .u-dir{padding:10px 0 0;outline:none}
+  .u-dir-inner{display:flex;align-items:center;justify-content:center;gap:4px}
+  .u-arrow{flex:none;width:44px;height:56px;border-radius:14px;color:#c7c7cc;display:grid;place-items:center}
+  .u-arrow:not(:disabled){color:var(--me)}
+  .u-dir-cur{flex:1;min-width:0}
+  .u-dir-line{display:flex;align-items:center;justify-content:center;gap:10px}
+  .u-dir-line .badge{flex:none;width:30px;height:30px;font-size:15px;border-radius:9px}
+  .u-dir-name{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.15;text-align:left}
+  .u-dir-sub{font-size:14px;color:#8e8e93;margin-top:3px}
+
+  /* Centre : anneau, titre, phrase, comme les écrans de présentation */
+  #ui > .u-center{flex:1 1 auto;min-height:0}
+  .u-center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:8px 0;overflow-y:auto;overscroll-behavior:contain}
+  .u-center > *{flex:none}
+  .ring{position:relative;width:clamp(150px,27vh,230px);height:clamp(150px,27vh,230px);--rc:#c7c7cc}
+  .ring > svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .ring-in svg{width:48px;height:48px}
+  .ring-bg{fill:none;stroke:#f2f2f7;stroke-width:9}
+  .ring-fg{fill:none;stroke:var(--rc);stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset 1s linear,stroke .3s}
+  .ring-in{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--rc)}
+  .ring-in .cd{font-size:clamp(40px,7.4vh,60px);font-weight:800;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;color:#0f172a}
+  .ring-in small{font-size:13px;font-weight:600;color:#8e8e93;margin-top:4px}
+  .ring.v-green{--rc:#16a34a} .ring.v-orange{--rc:#f59e0b} .ring.v-red{--rc:#dc2626} .ring.v-off{--rc:#475569} .ring.v-none{--rc:#c7c7cc}
+  .ring.v-none .ring-in,.ring.v-off .ring-in{color:var(--rc)}
+  .u-title{font-size:clamp(28px,4.4vh,34px);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-top:6px;color:#0f172a}
+  .u-center.v-green .u-title{color:#15803d}
+  .u-center.v-orange .u-title{color:#b45309}
+  .u-center.v-red .u-title{color:#b91c1c}
+  .u-text{font-size:17px;line-height:1.45;color:#6b7280;max-width:340px}
+  .u-text b{color:#0f172a}
+  .u-meta{font-size:14px;color:#8e8e93;max-width:340px;line-height:1.4}
+  .u-last{font-size:13px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:#fff;background:#0f172a;padding:5px 10px;border-radius:8px}
+  .u-last.soft{background:#f2f2f7;color:#3c3c43;text-transform:none;letter-spacing:0;font-weight:700}
+  .u-steps{list-style:none;counter-reset:s;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;text-align:left;font-size:15.5px;color:#3c3c43}
+  .u-steps li{counter-increment:s;display:flex;align-items:center;gap:10px}
+  .u-steps li::before{content:counter(s);flex:none;width:22px;height:22px;border-radius:50%;background:#f2f2f7;color:#0f172a;font-size:12.5px;font-weight:800;display:grid;place-items:center}
+  .u-steps .badge{vertical-align:-5px}
+  .u-note{font-size:14.5px;line-height:1.45;color:#3c3c43;background:#f2f2f7;border-radius:14px;padding:12px 14px;text-align:left;max-width:360px}
+  .u-btns{display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px;margin-top:6px}
+
+  /* Info trafic : une seule ligne discrète, texte complet */
+  #uAlert:empty{display:none}
+  .u-alertline{display:flex;align-items:flex-start;justify-content:center;gap:8px;width:100%;padding:8px 4px;font-size:14px;font-weight:600;color:#b45309;text-align:left;line-height:1.35}
+  .u-alertline svg{flex:none;margin-top:1px}
+
+  /* Bas : l'allure */
+  .u-foot{padding-top:6px;display:flex;flex-direction:column;gap:6px}
+  .u-speed{font-size:12.5px;color:#8e8e93}
+  .u-speed b{color:#3c3c43}
+
+  /* Vue Carte : une pastille, rien de plus */
+  .map-tools{top:calc(var(--safe-t) + 60px)}
+  .maptool .lbl{display:none}
+  .maptool{width:44px;padding:0;justify-content:center}
+  .maptool[aria-pressed="true"]{background:var(--me);color:#fff}
+  .mini2{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--safe-b) + 16px);z-index:1000;display:flex;align-items:center;gap:12px;width:calc(100% - 32px);max-width:440px;padding:14px 18px;border-radius:22px;background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.16);text-align:left}
+  .mini2-dot{width:14px;height:14px;border-radius:50%;background:#c7c7cc;flex:none}
+  .mini2.v-green .mini2-dot{background:#16a34a} .mini2.v-orange .mini2-dot{background:#f59e0b} .mini2.v-red .mini2-dot{background:#dc2626} .mini2.v-off .mini2-dot{background:#475569}
+  .mini2-main{flex:1;min-width:0}
+  .mini2-main b{display:block;font-size:18px;font-weight:800}
+  .mini2-main small{display:block;font-size:13px;color:#8e8e93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mini2-cd .cd{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+  .leaflet-bottom{bottom:calc(var(--safe-b) + 100px)}
+
+  /* Réglages */
+  .menu-foot{font-size:12.5px;color:#8e8e93;line-height:1.5;margin:22px 6px 6px;text-align:center}
+  .menu-foot a{color:var(--me)}
+
+  @media (max-height:700px){ .u-dir-name{font-size:21px} .u-text{font-size:16px} .u-center{gap:8px} }
+  @media (max-height:620px){ .u-meta{display:none} }
