@@ -3,6 +3,13 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.7.1
+- Rames : déplacement lissé ; plus de sauts à chaque actualisation du temps réel ni au passage à la vue Carte.
+- Vue Tram : la carte masquée n'est plus recalculée à chaque image (moins de batterie).
+- Meilleure solution plus fiable : plus de proposition de marcher vers une station située plus loin sur la même ligne ; une proposition retenue n'est pas remplacée pour quelques secondes gagnées.
+- La direction choisie reste sélectionnée quand la station la plus proche change.
+- En position simulée ou manuelle, l'app indique que le calcul se fait sur l'allure choisie.
+
 ## 5.7.0
 - Premier lancement : invitation à ajouter l'app à l'écran d'accueil. iPhone : les trois gestes illustrés, avec une flèche vers le bouton Partager. Android : bouton « Installer l'app ».
 - Présentée une seule fois, jamais si l'app est déjà installée ; toujours accessible depuis le menu (« Ajouter à l'écran d'accueil »).

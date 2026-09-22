@@ -1196,3 +1196,4 @@
   .inst.arrow-bottom .inst-arrow{display:block;position:absolute;left:50%;bottom:calc(var(--safe-b) + 6px);width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-top:18px solid var(--me);transform:translateX(-50%);animation:instBounce 1.2s ease-in-out infinite}
   @keyframes instBounce{50%{transform:translate(-50%,8px)}}
   @media (prefers-reduced-motion:reduce){ .inst-arrow{animation:none!important} }
+  .u-speed .muted-s{color:#8e8e93;font-weight:500}

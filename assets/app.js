@@ -149,7 +149,7 @@ const state = {
   lineMeta: Object.fromEntries(LINE_IDS.map(l => [l, { color: CFG.lines[l].color, shapes: null }])),
   user: null, mode: 'gps', lastGps: null, gps: 'search', firstFix: true,
   activeLines: new Set(savedLines.length ? savedLines : LINE_IDS),
-  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirRemote: false, dirTouched: false, feedHorizon: 0, liveKeys: null, view: store.get('tbm-view') || 'ui', follow: false, margin: 0, liveActivity: null, far: null, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
+  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirRemote: false, dirTouched: false, feedHorizon: 0, liveKeys: null, view: store.get('tbm-view') || 'ui', follow: false, margin: 0, liveActivity: null, far: null, betterId: null, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
   recents: store.get('tbm-recents') || [],
   cadence: store.get('tbm-cadence') || 'normal',
   bannerDismissed: { far: false, nogps: false }, bannerKind: null,
@@ -761,8 +761,12 @@ function computeCtx(now) {
         const local = sel.g.all.find(x => x.v && x.v !== 'red') || sel.g.list[0];
         const kL = local.j.callIdx[t.destSt];
         const localArr = kL != null ? local.j.calls[kL].arr : null;
-        const best = planTo(t.destSt, now).find(o => o.v && o.v !== 'red');
-        if (best && localArr && best.j.id !== local.j.id && best.arrDest < localArr - 120) {
+        const ahead = o => o.S.id !== S.id && (local.j.callIdx[o.S.id] ?? -1) > local.i; // station plus loin sur la même ligne
+        const opts = planTo(t.destSt, now).filter(o => o.v && o.v !== 'red' && o.j.id !== local.j.id && !ahead(o));
+        const keep = state.betterId && opts.find(o => o.j.id === state.betterId && o.arrDest < localArr - 60);
+        const best = keep || (opts[0] && opts[0].arrDest < localArr - 120 ? opts[0] : null);
+        state.betterId = best ? best.j.id : null;
+        if (best && localArr) {
           ctx.better = { gain: localArr - best.arrDest, local };
           ctx.primary = best;
           ctx.nextCatch = null;
@@ -1006,6 +1010,7 @@ function tramIcon(line, dest) {
 }
 function updateTrams(now) {
   const seen = new Set();
+  const visible = state.view === 'map';
   for (const j of state.journeys) {
     if (!state.activeLines.has(j.line)) continue;
     const p = tramPos(j, now);
@@ -1021,7 +1026,11 @@ function updateTrams(now) {
       trams.set(j.id, t);
     }
     t.p = p;
-    t.marker.setLatLng([p.lat, p.lng]);
+    const tNow = performance.now();
+    if (!t.ll || !visible || hav(t.ll, [p.lat, p.lng]) > 400) t.ll = [p.lat, p.lng];
+    else { const k = Math.min(1, (tNow - (t.at || tNow)) / 1000 * 4); t.ll = [t.ll[0] + (p.lat - t.ll[0]) * k, t.ll[1] + (p.lng - t.ll[1]) * k]; }
+    t.at = tNow;
+    if (visible) t.marker.setLatLng(t.ll);
     if (!t.dirEl) { const el = t.marker.getElement(); if (el) { t.dirEl = el.querySelector('.tv-body'); t.body = el.querySelector('.tv'); } }
     if (t.dirEl) {
       t.dirEl.style.transform = `rotate(${(p.bearing - 90).toFixed(1)}deg)`;
@@ -1282,7 +1291,7 @@ function setView(v) {
   document.body.dataset.view = v;
   $$('#navSeg [data-view]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === v)));
   haptic('select');
-  if (v === 'map') { map.invalidateSize(); state.needFit = true; setTimeout(() => { map.invalidateSize(); fitTrip(false); }, 80); }
+  if (v === 'map') { map.invalidateSize(); for (const t of trams.values()) t.ll = null; updateTrams(nowS()); state.needFit = true; setTimeout(() => { map.invalidateSize(); fitTrip(false); }, 80); }
   tickUi(true);
 }
 function setFollow(on) {
@@ -1516,7 +1525,9 @@ function renderAlert(ctx) {
   setHTML(el, `<button type="button" class="p-alert" data-act="digest">${svg('alert', 16)}<span>${esc(m.title || m.body)}</span>${svg('chevR', 16)}</button>`);
 }
 function renderBottom() {
-  setHTML($('#uSpeed'), state.realKmh ? `Calculé sur votre vitesse réelle : <b>${fmtKmh(state.realKmh)}</b>` : '');
+  const txt = state.realKmh ? `Calculé sur votre vitesse réelle : <b>${fmtKmh(state.realKmh)}</b>`
+    : state.mode !== 'gps' && state.user ? `<span class="muted-s">Position ${state.mode === 'sim' ? 'simulée' : 'placée à la main'} : calcul sur l\u2019allure choisie</span>` : '';
+  setHTML($('#uSpeed'), txt);
 }
 function renderMini(ctx) {
   const el = $('#mini');
@@ -1718,7 +1729,7 @@ function tickUi(force) {
   state.kmhNow = state.realKmh || kmhOf(state.cadence);
   const ctx = computeCtx(now);
   lastCtx = ctx;
-  if (ctx.board && lastBoardId && ctx.board.id !== lastBoardId && !ctx.forced) { toast(`Station la plus proche : ${ctx.board.name}`); state.dirTouched = false; }
+  if (ctx.board && lastBoardId && ctx.board.id !== lastBoardId && !ctx.forced) toast(`Station la plus proche : ${ctx.board.name}`);
   lastBoardId = ctx.board ? ctx.board.id : null;
   const pv = ctx.primary && ctx.primary.v ? { j: ctx.primary.j.id, v: ctx.primary.v } : null;
   if (pv && lastVerdict && pv.j === lastVerdict.j && pv.v !== lastVerdict.v) haptic(pv.v);
@@ -1915,8 +1926,9 @@ schedule();
 initUpdates();
 
 let lastTick = 0;
+let lastTramUpd = 0;
 function frame(t) {
-  updateTrams(nowS());
+  if (state.view === 'map' || t - lastTramUpd > 1000) { lastTramUpd = t; updateTrams(nowS()); }
   if (t - lastTick > 200) { lastTick = t; tickCountdowns(); }
   tickUi(false);
   requestAnimationFrame(frame);
