@@ -905,8 +905,7 @@
   .u-center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:8px 0;overflow-y:auto;overscroll-behavior:contain}
   .u-center > *{flex:none}
   .ring{position:relative;width:clamp(150px,27vh,230px);height:clamp(150px,27vh,230px);--rc:#c7c7cc}
-  .ring > svg{width:100%;height:100%;transform:rotate(-90deg)}
-  .ring-in svg{width:48px;height:48px}
+  .ring svg{width:100%;height:100%;transform:rotate(-90deg)}
   .ring-bg{fill:none;stroke:#f2f2f7;stroke-width:9}
   .ring-fg{fill:none;stroke:var(--rc);stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset 1s linear,stroke .3s}
   .ring-in{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--rc)}
@@ -960,3 +959,57 @@
 
   @media (max-height:700px){ .u-dir-name{font-size:21px} .u-text{font-size:16px} .u-center{gap:8px} }
   @media (max-height:620px){ .u-meta{display:none} }
+  .ring > svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .ring-in svg{width:48px;height:48px}
+
+  /* =================== v5.4 =================== */
+  /* Station : libellé explicite */
+  .u-where{flex-direction:column;gap:2px;padding-top:2px}
+  #uStationInfo{display:flex;flex-direction:column;align-items:center;gap:1px}
+  .u-where-lbl{font-size:12px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:.04em}
+  .u-where-lbl .u-link{text-transform:none;letter-spacing:0;font-size:12px}
+  .u-where-st{display:flex;align-items:center;gap:6px;font-size:16px;color:#6b7280}
+  .u-where-st svg{color:var(--me);flex:none}
+  .u-where-st b{color:#0f172a;font-weight:700;font-size:17px}
+  .u-where-st span{white-space:nowrap}
+
+  /* Panneau central : un encadré doux, jamais de défilement */
+  #ui > .u-center{flex:1 1 auto;min-height:0}
+  .u-center{margin:8px 0 6px;padding:18px 16px;border-radius:28px;background:#f6f7f9;overflow:hidden;gap:8px}
+  .u-center .ring-bg{stroke:#e8eaee}
+  .ring{width:clamp(130px,23vh,200px);height:clamp(130px,23vh,200px)}
+  .ring-in .cd{font-size:clamp(36px,6.4vh,54px)}
+  .u-center.compact{justify-content:flex-start;padding-top:14px}
+  .u-center.compact .ring{width:clamp(88px,13vh,120px);height:clamp(88px,13vh,120px)}
+  .u-center.compact .ring-in .cd{font-size:clamp(24px,3.8vh,32px)}
+  .u-center.compact .ring-in small{font-size:11px;margin-top:2px}
+  .u-center.compact .ring-in svg{width:32px;height:32px}
+  .u-center.compact .u-title{font-size:clamp(24px,3.6vh,30px);margin-top:2px}
+  .u-center.compact .u-text{font-size:15.5px}
+
+  /* Étapes : bien distinctes, chacune sur sa ligne avec son heure */
+  .u-steps2{list-style:none;margin:4px 0 0;padding:4px 14px;width:100%;max-width:380px;background:#fff;border-radius:18px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .u-steps2 li{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:11px 0;text-align:left}
+  .u-steps2 li + li{border-top:1px solid #eef0f3}
+  .st-n{width:26px;height:26px;border-radius:50%;background:#0f172a;color:#fff;font-size:13px;font-weight:800;display:grid;place-items:center}
+  .st-t{display:flex;align-items:center;gap:8px;min-width:0;font-size:15.5px;color:#3c3c43;line-height:1.3;flex-wrap:wrap}
+  .st-t b{color:#0f172a}
+  .st-t svg{color:#8e8e93;flex:none}
+  .st-t small{font-size:12.5px;color:#8e8e93}
+  .st-t em{font-style:normal;font-size:12px;font-weight:800;padding:1px 7px;border-radius:6px;background:var(--hurry-bg);color:var(--hurry-ink)}
+  .st-h{font-size:15.5px;font-weight:800;color:#0f172a;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  /* Message de fin de service : aperçu, message complet au toucher */
+  .u-note{display:flex;flex-direction:column;gap:4px;width:100%;max-width:380px;background:#fff;border-radius:16px;padding:12px 14px;text-align:left;font-size:14.5px;line-height:1.4;color:#3c3c43}
+  .u-note b{color:#0f172a}
+  .u-note-b{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+  .u-note-more{color:var(--me);font-weight:600;font-size:14px}
+
+  @media (max-height:700px){ .u-center{padding:14px 12px} .u-steps2 li{padding:8px 0} }
+  .u-where-st{flex-wrap:wrap;justify-content:center;column-gap:5px}
+  .u-where-st b{white-space:nowrap}
+  .st-t{display:block}
+  .st-t > svg,.st-t > .badge{vertical-align:-4px;margin-right:6px}
+  .st-t small{margin-left:4px}
+  .u-center.compact .u-meta{display:none}
+  .u-title{font-size:clamp(26px,4vh,32px)}

@@ -242,8 +242,15 @@ function buildStations(list) {
   }
   for (const st of Object.values(stations)) {
     st.ll = [st.sLat / st.k, st.sLng / st.k];
+    st.near = [];
     st.n = norm(st.name);
     st.key = KEY_NAMES.some(k => st.n.includes(k));
+  }
+  const all = Object.values(stations);
+  for (const a of all) for (const b of all) {
+    if (a === b) continue;
+    const d = hav(a.ll, b.ll);
+    if (d < 300) a.near.push({ id: b.id, d });
   }
   state.stations = stations;
   state.sp2st = sp2st;
@@ -398,6 +405,7 @@ async function refreshLines(lines) {
   indexJourneys();
   absorb(fresh);
   learnDirections(fresh);
+  state.liveKeys = new Set(state.journeys.map(j => j.line + '|' + j.dest));
   state.feedHorizon = state.journeys.reduce((m, j) => Math.max(m, j.calls[0].dep), 0);
   state.lastUpdate = now;
   state.api = failed.size ? 'partial' : 'ok';
@@ -579,11 +587,9 @@ function addDay(o) { const d = dayStr(); o.days = o.days || []; if (!o.days.incl
    les courses exceptionnelles (dépôt, service partiel, données erronées) ne polluent pas le sélecteur. */
 function learnDirections(journeys) {
   const now = Date.now();
-  state.liveKeys = new Set();
   for (const j of journeys) {
     const last = j.calls[j.calls.length - 1];
     const key = j.line + '|' + j.dest;
-    state.liveKeys.add(key);
     const t = dirCat.term[key] || (dirCat.term[key] = { line: j.line, dest: j.dest });
     t.destSt = last.st;
     addDay(t);
@@ -653,14 +659,20 @@ function transferOptions(stations, destId, now) {
       for (let k = i + 1; k < j.calls.length; k++) {
         const T = j.calls[k].st, tArr = j.calls[k].arr;
         if (T === destId) break;
-        for (const [j2, m] of state.stIndex.get(T) || []) {
-          if (j2.line === j.line || !state.activeLines.has(j2.line)) continue;
-          const c2 = j2.calls[m];
-          if (c2.dep < tArr + CFG.transferSec) continue;
-          const kd = j2.callIdx[destId];
-          if (kd == null || kd <= m) continue;
-          const arrDest = j2.calls[kd].arr;
-          if (!best || arrDest < best.arrDest) best = { arrDest, T, tArrT: tArr, j2, m, line: j2.line, tDep2: c2.dep, dest2: j2.dest };
+        const st = state.stations[T];
+        // même station, ou station voisine à rejoindre à pied
+        const hubs = [{ id: T, d: 0 }].concat(st && st.near ? st.near : []);
+        for (const hub of hubs) {
+          const minT = Math.max(CFG.transferSec, hub.d ? hub.d * 1.3 / 1.2 + 60 : 0);
+          for (const [j2, m] of state.stIndex.get(hub.id) || []) {
+            if (j2.line === j.line || !state.activeLines.has(j2.line)) continue;
+            const c2 = j2.calls[m];
+            if (c2.dep < tArr + minT) continue;
+            const kd = j2.callIdx[destId];
+            if (kd == null || kd <= m) continue;
+            const arrDest = j2.calls[kd].arr;
+            if (!best || arrDest < best.arrDest) best = { arrDest, T, T2: hub.id, walkT: hub.d, tArrT: tArr, j2, m, line: j2.line, tDep2: c2.dep, dest2: j2.dest };
+          }
         }
       }
       if (best) { first.arrDest = best.arrDest; first.transfer = best; res.push(first); }
@@ -1307,11 +1319,11 @@ function simButtons() {
 /* 1. Où je suis */
 function renderStation(ctx) {
   const el = $('#uStationInfo');
-  if (!ctx.board) return setHTML(el, 'Position inconnue');
+  if (!ctx.board) return setHTML(el, '<span class="u-where-lbl">Position inconnue</span>');
   const w = ctx.boardW;
-  setHTML(el, `<b>${esc(ctx.board.name)}</b>${w ? `<span> · ${fmtWalk(w.sec)} à pied</span>` : ''}${ctx.forced ? ' <button type="button" class="u-link" data-act="from-clear">(la plus proche)</button>' : ''}`);
+  setHTML(el, `<span class="u-where-lbl">${ctx.forced ? 'Station choisie' : 'Station la plus proche'}${ctx.forced ? ' · <button type="button" class="u-link" data-act="from-clear">revenir à la plus proche</button>' : ''}</span>
+    <span class="u-where-st">${svg('pin', 16)}<b>${esc(ctx.board.name)}</b>${w ? `<span>· ${fmtWalk(w.sec)} à pied</span>` : ''}</span>`);
 }
-
 /* 2. Dans quel sens */
 function chooseDir(key, remote) {
   state.dir = key; state.dirRemote = !!remote; state.dirTouched = true;
@@ -1391,18 +1403,22 @@ function ring(cls, inner, frac) {
 }
 function center(cls, ringHTML, title, text, extra = '') {
   const el = $('#uVerdict');
-  el.className = 'u-center ' + cls;
+  const compact = cls === 'v-off' || extra.includes('u-steps2');
+  el.className = 'u-center ' + cls + (compact ? ' compact' : '');
   setHTML(el, `${ringHTML}<h2 class="u-title">${title}</h2><p class="u-text">${text}</p>${extra}`);
 }
 function planText(ctx) {
   const p = ctx.primary, steps = [];
-  if (p.w && p.S.id !== ctx.board.id) steps.push(`Marchez jusqu\u2019à <b>${esc(p.S.name)}</b>`);
-  steps.push(`Prenez le ${badge(p.line, 'sm')} à ${fmtClock(p.tArr)}`);
+  const step = (icon, html, time) => steps.push(`<li><span class="st-n">${steps.length + 1}</span><span class="st-t">${icon}${html}</span><span class="st-h">${time || ''}</span></li>`);
+  if (p.w && p.S.id !== ctx.board.id) step(svg('walk', 16), `Marchez jusqu\u2019à <b>${esc(p.S.name)}</b>`, fmtWalk(p.w.sec));
+  step(badge(p.line, 'sm'), `à <b>${esc(p.S.name)}</b>, vers ${esc(p.dest)}`, fmtClock(p.tArr));
   if (p.transfer) {
-    steps.push(`Descendez à <b>${esc(stName(p.transfer.T))}</b>`);
-    steps.push(`Prenez le ${badge(p.transfer.line, 'sm')} à ${fmtClock(p.transfer.tDep2)}${p.transfer.tDep2 - p.transfer.tArrT < 180 ? ' (serré)' : ''}`);
+    const t = p.transfer, stops = p.j.callIdx[t.T] - p.i;
+    step(svg('pin', 16), `Descendez à <b>${esc(stName(t.T))}</b> <small>${stops} arrêt${stops > 1 ? 's' : ''}</small>`, fmtClock(t.tArrT));
+    if (t.T2 && t.T2 !== t.T) step(svg('walk', 16), `Marchez jusqu\u2019à <b>${esc(stName(t.T2))}</b>`, fmtWalk(t.walkT * 1.3 / 1.2));
+    step(badge(t.line, 'sm'), `à <b>${esc(stName(t.T2 || t.T))}</b>, vers ${esc(t.dest2)}${t.tDep2 - t.tArrT < 180 ? ' <em>serré</em>' : ''}`, fmtClock(t.tDep2));
   }
-  return `<ol class="u-steps">${steps.map(s => `<li>${s}</li>`).join('')}</ol>`;
+  return `<ol class="u-steps2">${steps.join('')}</ol>`;
 }
 function renderVerdict(ctx) {
   const gray = (icon, title, text, extra) => center('v-none', ring('v-none', svg(icon, 44)), title, text, extra);
@@ -1425,7 +1441,7 @@ function renderVerdict(ctx) {
       const a = opts.find(x => x.v && x.v !== 'red') || opts[0];
       if (a) alt = `<p class="u-text"><b>Autre solution :</b> ${a.S.id !== ctx.board.id ? `à pied jusqu\u2019à ${esc(a.S.name)}, puis ` : ''}${badge(a.line, 'sm')} dans ${cdSpan(a, 'min')}${a.transfer ? `, correspondance ${badge(a.transfer.line, 'sm')} à ${esc(stName(a.transfer.T))}` : ''}.</p>`;
     }
-    const reason = o.reason ? `<div class="u-note"><b>Info trafic ligne ${esc(s.line)}</b>${o.reason.title ? ` · ${esc(o.reason.title)}` : ''}<br>${esc(o.reason.body)}</div>` : '';
+    const reason = o.reason ? `<button type="button" class="u-note" data-act="digest"><b>Info trafic ligne ${esc(s.line)}${o.reason.title ? ` · ${esc(o.reason.title)}` : ''}</b><span class="u-note-b">${esc(o.reason.body)}</span><span class="u-note-more">Lire le message complet</span></button>` : '';
     $('#srVerdict').textContent = `Plus de tram vers ${s.dest}.`;
     return center('v-off', ring('v-off', svg('tram', 44)), `Plus de tram vers ${esc(s.dest)}`, o.reason ? 'Aucun passage annoncé pour le moment.' : 'Aucun passage annoncé et aucune info trafic : fin de service ou interruption.', alt + reason);
   }

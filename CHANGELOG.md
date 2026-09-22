@@ -3,6 +3,13 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.4.0
+- Correction : les terminus des autres lignes (ex. Floirac Dravemont depuis CAPC) disparaissaient de « autre direction » après quelques secondes.
+- Correspondances à pied entre stations voisines (moins de 300 m), avec le temps de marche.
+- Étapes numérotées bien distinctes, chacune avec sa station et son heure.
+- Panneau central encadré ; aucun défilement possible.
+- Station la plus proche affichée avec son libellé et le temps à pied.
+
 ## 5.3.0
 - Écran Tram refait sur le modèle de la présentation : tout centré, sans cadres. Un anneau avec le compte à rebours, un grand titre, une phrase.
 - « Trop tard » montre directement le tram que vous pouvez prendre (« Prenez le suivant », « Partez à 08:31 »).
