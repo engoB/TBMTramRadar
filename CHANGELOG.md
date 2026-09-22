@@ -3,6 +3,14 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.5.0
+- Trois panneaux aux rôles distincts : trajet (depuis / vers) en blanc, décision teintée selon le verdict, alerte en ambre seulement si elle vous concerne.
+- Itinéraire : compte à rebours et verdict en tête, puis les étapes, une par ligne, avec l'heure à droite.
+- Numéros d'étapes teintés : monter (couleur pleine de la ligne), descendre (couleur claire), marcher (gris).
+- Nom de direction lisible en entier, statut sous le nom (« 2 sur 4 directions », « avec correspondance »).
+- Allure : plus de légende superflue ; la vitesse réelle s'affiche seulement quand elle est mesurée.
+- Vérifié sans défilement jusqu'à un écran de 375 × 600.
+
 ## 5.4.0
 - Correction : les terminus des autres lignes (ex. Floirac Dravemont depuis CAPC) disparaissaient de « autre direction » après quelques secondes.
 - Correspondances à pied entre stations voisines (moins de 300 m), avec le temps de marche.

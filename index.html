@@ -40,12 +40,14 @@
   </section>
 
   <main id="ui" aria-label="Votre tram">
-    <div class="u-where"><span id="uStationInfo"></span><button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button></div>
-    <section id="uDir" class="u-dir" tabindex="0" aria-label="Direction : flèches gauche et droite"><div id="uDirInner" class="u-dir-inner"></div></section>
-    <section id="uVerdict" class="u-center" aria-live="off"></section>
+    <section class="p-trip" aria-label="Trajet">
+      <div class="trip-row"><span class="trip-ico" data-icon="pin" data-size="18" aria-label="Depuis"></span><div id="uStationInfo" class="trip-main"></div><button id="gps" type="button" class="gps" data-state="search"><span class="dot"></span><span class="txt">GPS…</span></button></div>
+      <div id="uDir" class="trip-row trip-to" tabindex="0" aria-label="Direction : flèches gauche et droite"><span class="trip-ico to" data-icon="flag" data-size="18" aria-label="Vers"></span><div id="uDirInner" class="trip-main"></div></div>
+    </section>
+    <section id="uVerdict" class="p-main"></section>
     <div id="srVerdict" class="sr-only" aria-live="polite"></div>
     <div id="uAlert"></div>
-    <section class="u-foot">
+    <section class="p-allure">
       <div id="cadence" class="seg seg-sm full" role="radiogroup" aria-label="Votre allure"></div>
       <p id="uSpeed" class="u-speed"></p>
       <button id="laBtn" type="button" class="u-la" data-act="la" aria-pressed="false" hidden><span data-icon="lock" data-size="16"></span><span class="lbl">Suivre sur l’écran verrouillé</span></button>
