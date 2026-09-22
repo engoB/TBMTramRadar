@@ -3,6 +3,14 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.6.0
+- Situation instantanée : plus de « Partez à… ». Le tram qui arrive (ligne, destination, où il en est) est mis en avant.
+- « À 2 arrêts » en grand ; retard et passages suivants retirés.
+- Messages plus humains : « Tout roule », « C'est bon pour vous », « Ça va se jouer de peu », « Celui-ci vous file sous le nez ».
+- Libellés explicites : « Vous êtes près de », « Vous allez vers », « Le plus rapide, maintenant ».
+- La meilleure solution est cherchée même quand la direction est desservie : marcher jusqu'à une autre station, une autre ligne ou une correspondance, si cela fait gagner au moins 2 min.
+- Nom de station jamais tronqué ; panneau de décision compact et centré.
+
 ## 5.5.0
 - Trois panneaux aux rôles distincts : trajet (depuis / vers) en blanc, décision teintée selon le verdict, alerte en ambre seulement si elle vous concerne.
 - Itinéraire : compte à rebours et verdict en tête, puis les étapes, une par ligne, avec l'heure à droite.

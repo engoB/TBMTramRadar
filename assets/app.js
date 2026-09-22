@@ -738,6 +738,7 @@ function computeCtx(now) {
   if (remoteKey) {
     const t = termOf(remoteKey);
     ctx.remote = true;
+    ctx.plan = true;
     ctx.sel = { key: remoteKey, line: t.line, dest: t.dest, g: null };
     const opts = t.destSt && state.stations[t.destSt] ? planTo(t.destSt, now) : [];
     ctx.options = opts;
@@ -752,6 +753,21 @@ function computeCtx(now) {
       ctx.nextCatch = ctx.primary.v === 'red' ? sel.g.catchable : null;
       const li = lastInfo(sel.line, sel.dest, sel.g.all);
       if (li.lastT) ctx.last = li.lastT;
+      // Meilleure solution : marcher vers une autre station, prendre une autre ligne ou une correspondance
+      // si cela fait nettement avancer plus vite dans la même direction (repère : l'arrivée au terminus).
+      const t = termOf(sel.key);
+      if (t && t.destSt && state.user) {
+        const local = sel.g.all.find(x => x.v && x.v !== 'red') || sel.g.list[0];
+        const kL = local.j.callIdx[t.destSt];
+        const localArr = kL != null ? local.j.calls[kL].arr : null;
+        const best = planTo(t.destSt, now).find(o => o.v && o.v !== 'red');
+        if (best && localArr && best.j.id !== local.j.id && best.arrDest < localArr - 120) {
+          ctx.better = { gain: localArr - best.arrDest, local };
+          ctx.primary = best;
+          ctx.nextCatch = null;
+          ctx.plan = true;
+        }
+      }
     } else ctx.off = lastInfo(sel.line, sel.dest, []);
   }
   return ctx;
@@ -1317,15 +1333,16 @@ function simButtons() {
   return `<div class="u-acts"><button class="btn" type="button" data-act="sim" data-spot="bourse">${svg('pin', 16)}Place de la Bourse</button><button class="btn ghost" type="button" data-act="sim" data-spot="quinconces">Quinconces</button></div>`;
 }
 
-/* 1. Je suis là */
+/* 1. Vous êtes près de */
 function renderStation(ctx) {
   const el = $('#uStationInfo');
-  if (!ctx.board) return setHTML(el, '<b class="trip-name muted">Position inconnue</b>');
+  if (!ctx.board) return setHTML(el, '<span class="trip-cap">Vous êtes près de</span><b class="trip-name muted">Position inconnue</b>');
   const w = ctx.boardW;
-  setHTML(el, `<b class="trip-name">${esc(ctx.board.name)}</b>${w ? `<span class="trip-aside">${fmtWalk(w.sec)} à pied</span>` : ''}${ctx.forced ? '<button type="button" class="trip-reset" data-act="from-clear">la plus proche</button>' : ''}`);
+  setHTML(el, `<span class="trip-cap">Vous êtes près de${ctx.forced ? ' · <button type="button" class="trip-reset" data-act="from-clear">revenir à la plus proche</button>' : ''}</span>
+    <span class="trip-line"><b class="trip-name">${esc(ctx.board.name)}</b>${w ? `<span class="trip-aside">${fmtWalk(w.sec)} à pied</span>` : ''}</span>`);
 }
 
-/* 2. Je vais là */
+/* 2. Vous allez vers */
 function chooseDir(key, remote) {
   state.dir = key; state.dirRemote = !!remote; state.dirTouched = true;
   store.set('tbm-dir', key);
@@ -1357,17 +1374,18 @@ function stepDir(delta) {
 function renderDir(ctx) {
   const el = $('#uDirInner');
   const dirs = ctx.dirs || [];
-  if (!ctx.board) return setHTML(el, '<b class="trip-name muted">—</b>');
-  if (!dirs.length && !ctx.remote) return setHTML(el, `<button type="button" class="trip-pick" data-act="dirsheet"><b class="trip-name">Choisir une direction</b>${svg('chevD', 16)}</button>`);
+  const cap = '<span class="trip-cap">Vous allez vers</span>';
+  if (!ctx.board) return setHTML(el, `${cap}<b class="trip-name muted">—</b>`);
+  if (!dirs.length && !ctx.remote) return setHTML(el, `${cap}<button type="button" class="trip-pick" data-act="dirsheet"><b class="trip-name">Choisir une direction</b>${svg('chevD', 16)}</button>`);
   const s = ctx.sel, can = dirs.length > 1 || ctx.remote;
   const i = ctx.remote ? -1 : dirs.findIndex(d => d.key === s.key);
-  const status = ctx.remote ? '<span class="trip-tag">avec correspondance</span>' : dirs.length > 1 ? `${i + 1} sur ${dirs.length} directions` : 'seule direction';
-  setHTML(el, `
-    <button type="button" class="trip-arrow" data-act="dir-prev" aria-label="Direction précédente" ${can ? '' : 'disabled'}>${svg('chevL', 24)}</button>
+  const status = ctx.remote ? 'pas desservie ici' : dirs.length > 1 ? `${i + 1} sur ${dirs.length}` : 'seule direction';
+  setHTML(el, `${cap}<span class="trip-line">
+    <button type="button" class="trip-arrow" data-act="dir-prev" aria-label="Direction précédente" ${can ? '' : 'disabled'}>${svg('chevL', 22)}</button>
     <button type="button" class="trip-pick" data-act="dirsheet" aria-label="Ligne ${esc(s.line)} vers ${esc(s.dest)}, changer de direction">
       ${badge(s.line)}<span class="trip-col"><b id="uDirName" class="trip-name">${esc(s.dest)}</b><span class="trip-sub">${status} ${svg('chevD', 12)}</span></span>
     </button>
-    <button type="button" class="trip-arrow" data-act="dir-next" aria-label="Direction suivante" ${can ? '' : 'disabled'}>${svg('chevR', 24)}</button>`);
+    <button type="button" class="trip-arrow" data-act="dir-next" aria-label="Direction suivante" ${can ? '' : 'disabled'}>${svg('chevR', 22)}</button></span>`);
 }
 function renderDirSheet() {
   const d = $('#dirSheet');
@@ -1388,26 +1406,39 @@ function renderDirSheet() {
     : '<p class="muted">Les directions apparaissent dès que le temps réel est chargé.</p>');
 }
 
-/* 3. Voilà comment faire */
+/* 3. Le plus rapide, maintenant */
 function whereText(p, now) {
   const pos = tramPos(p.j, now), c = p.j.calls;
   if (!pos) return `part du terminus à ${fmtClock(c[0].dep)}`;
   if (pos.dwell && pos.at === p.i) return 'à quai';
   const n = pos.dwell ? p.i - pos.at : p.i - pos.next;
-  if (n <= 0) return 'arrive';
+  if (n <= 0) return 'arrive en station';
   return `à ${n} arrêt${n > 1 ? 's' : ''}`;
 }
-function ring(cls, inner, frac) {
-  const C = 2 * Math.PI * 54;
-  const off = frac == null ? 0 : C * (1 - clamp(frac, 0, 1));
-  return `<div class="ring ${cls}"><svg viewBox="0 0 120 120" aria-hidden="true"><circle class="ring-bg" cx="60" cy="60" r="54"/><circle class="ring-fg" cx="60" cy="60" r="54" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg><div class="ring-in">${inner}</div></div>`;
+const minTxt = s => { const m = Math.round(s / 60); return m <= 1 ? 'une minute' : `${m} min`; };
+/* Messages : un titre qui dit la situation, une phrase qui aide, sans ordre sec */
+function mood(ctx, p, missed) {
+  if (!p.w) return { t: 'Un tram arrive', m: 'Dites-nous où vous êtes pour savoir s\u2019il est pour vous.' };
+  const lead = p.arrIn - p.w.sec;
+  if (p.v === 'red') return { t: 'Pas de tram rattrapable', m: 'Aucun passage à votre portée pour l\u2019instant.' };
+  if (ctx.better) {
+    const g = minTxt(ctx.better.gain), hurry = p.v === 'orange' ? ' Pressez un peu le pas.' : '';
+    return p.transfer ? { t: 'Plus rapide avec une correspondance', m: `Environ ${g} gagnées sur le ${ctx.better.local.line} d\u2019ici.${hurry}` }
+      : p.S.id !== ctx.board.id ? { t: 'Marcher un peu vaut le coup', m: `Depuis ${esc(p.S.name)}, vous gagnez environ ${g}.${hurry}` }
+      : { t: `Le ${p.line} est plus rapide`, m: `Environ ${g} gagnées sur le ${ctx.better.local.line}.${hurry}` };
+  }
+  if (missed) return { t: 'Celui-ci vous file sous le nez', m: `Pas grave : le suivant est pour vous, sans courir.` };
+  if (p.v === 'orange') return lead >= 0 ? { t: 'Ça va se jouer de peu', m: 'Allongez un peu le pas et c\u2019est bon.' } : { t: 'De justesse', m: 'Il sera à quai à votre arrivée : pressez-vous un peu.' };
+  if (lead >= 300) return { t: 'Tout roule', m: `Vous serez sur le quai ${minTxt(lead)} avant lui, à votre rythme.` };
+  return { t: 'C\u2019est bon pour vous', m: `Environ ${minTxt(lead)} d\u2019avance en marchant comme vous le faites.` };
 }
+function ring(cls, inner) { return `<div class="ring ${cls}"><div class="ring-in">${inner}</div></div>`; }
 function panel(cls, html) {
   const el = $('#uVerdict');
   el.className = 'p-main ' + cls;
-  setHTML(el, html);
+  setHTML(el, `<span class="d-cap">Le plus rapide, maintenant</span>${html}`);
 }
-/* Étapes : une ligne chacune, numéro teinté selon la ligne (monter : plein, descendre : clair, marcher : gris) */
+/* Étapes : une ligne chacune ; numéro teinté selon la ligne (monter : plein, descendre : clair, marcher : gris) */
 function planSteps(ctx, p) {
   const steps = [];
   const add = (kind, color, html, time) => steps.push({ kind, color, html, time });
@@ -1421,61 +1452,57 @@ function planSteps(ctx, p) {
   }
   return `<ol class="steps3">${steps.map((s, k) => `<li class="s-${s.kind}"${s.color ? ` style="--lc:${s.color}"` : ''}><span class="s-n">${k + 1}</span><span class="s-t">${s.html}</span><span class="s-h">${s.time}</span></li>`).join('')}</ol>`;
 }
+/* Le tram qui arrive : compte à rebours, ligne, destination, et surtout où il en est */
+function tramCard(p, now, v) {
+  return `<div class="d-top">
+    <div class="d-count v-${v}">${cdSpan(p)}<small>${p.arrIn > 0 ? 'avant le tram' : 'à quai'}</small></div>
+    <div class="d-tram">
+      <div class="d-id">${badge(p.line)}<span>${esc(p.dest)}</span></div>
+      <div class="d-pos">${esc(whereText(p, now))}</div>
+      <div class="d-at">quai ${esc(p.S.name)}</div>
+    </div></div>`;
+}
 function renderVerdict(ctx) {
-  const gray = (icon, title, text, extra = '') => panel('v-none', `${ring('v-none sm', svg(icon, 36))}<h2 class="m-title">${title}</h2><p class="m-text">${text}</p>${extra}`);
+  const gray = (icon, title, text, extra = '') => panel('v-none', `<div class="d-empty">${ring('v-none', svg(icon, 30))}<div><h2 class="d-title">${title}</h2><p class="d-msg plain">${text}</p></div></div>${extra}`);
   if (state.api === 'error' && !state.journeys.length) {
     const blocked = state.apiErrorKind === 'blocked' || state.apiErrorKind === 'proxy';
-    return gray('wifi', 'Temps réel indisponible', `${esc(state.apiError)}.`, `<div class="u-btns"><button class="btn big" type="button" data-act="retry">Réessayer</button>${blocked ? '<button class="btn big ghost" type="button" data-act="settings">Dépanner la connexion</button>' : ''}</div>`);
+    return gray('wifi', 'Le temps réel ne répond pas', `${esc(state.apiError)}.`, `<div class="u-btns"><button class="btn big" type="button" data-act="retry">Réessayer</button>${blocked ? '<button class="btn big ghost" type="button" data-act="settings">Dépanner la connexion</button>' : ''}</div>`);
   }
-  if (!state.stopsReady || (!state.lastUpdate && state.api === 'loading')) return gray('tram', 'Connexion…', 'Chargement des horaires en temps réel.');
+  if (!state.stopsReady || (!state.lastUpdate && state.api === 'loading')) return gray('tram', 'Un instant…', 'On récupère les trams en temps réel.');
   if (state.far && state.mode === 'gps') {
     let near = '';
-    if (state.lastGps) { let best = null, bd = Infinity; for (const st of stationList()) { const d = hav(state.lastGps.ll, st.ll); if (d < bd) { bd = d; best = st; } } if (best) near = ` Tram le plus proche : ${esc(best.name)}, à ${fmtDist(bd)}.`; }
-    return gray('pin', 'Hors du réseau', `Vous êtes à ${Math.round(state.far / 1000)} km de Bordeaux.${near}`, `<div class="u-btns"><button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Essayer depuis la place de la Bourse</button></div>`);
+    if (state.lastGps) { let best = null, bd = Infinity; for (const st of stationList()) { const d = hav(state.lastGps.ll, st.ll); if (d < bd) { bd = d; best = st; } } if (best) near = ` Le tram le plus proche est à ${esc(best.name)}, ${fmtDist(bd)}.`; }
+    return gray('pin', 'Un peu loin du tram', `Vous êtes à ${Math.round(state.far / 1000)} km de Bordeaux.${near}`, `<div class="u-btns"><button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Essayer depuis la place de la Bourse</button></div>`);
   }
-  if (!ctx.board) return gray('locate', 'Où êtes-vous ?', 'Autorisez la localisation, ou placez-vous dans la vue Carte.', `<div class="u-btns"><button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Essayer depuis la place de la Bourse</button></div>`);
+  if (!ctx.board) return gray('locate', 'Où êtes-vous ?', 'Activez la localisation, ou placez-vous dans la vue Carte.', `<div class="u-btns"><button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Essayer depuis la place de la Bourse</button></div>`);
   if (ctx.off) {
     const s = ctx.sel, o = ctx.off;
     let alt = '';
     if (!ctx.remote) {
       const t = termOf(s.key), opts = t && t.destSt ? planTo(t.destSt, ctx.now) : [];
       const a = opts.find(x => x.v && x.v !== 'red') || opts[0];
-      if (a) alt = `<div class="m-sub"><span class="m-sub-lbl">Autre solution</span>${planSteps(ctx, a)}</div>`;
+      if (a) alt = `<div class="m-sub"><span class="m-sub-lbl">Il reste une solution</span>${planSteps(ctx, a)}</div>`;
     }
     const reason = o.reason ? `<button type="button" class="m-note" data-act="digest"><b>Info trafic ligne ${esc(s.line)}</b><span>${esc(o.reason.title || o.reason.body)}</span></button>` : '';
     $('#srVerdict').textContent = `Plus de tram vers ${s.dest}.`;
-    return panel('v-off', `<div class="m-head"><div class="m-badge v-off">${svg('tram', 26)}</div><div class="m-head-t"><h2 class="m-title">Plus de tram</h2><p class="m-text">${o.reason ? 'Aucun passage annoncé.' : 'Aucun passage ni info trafic : fin de service ou interruption.'}</p></div></div>${reason}${alt}`);
+    return panel('v-off', `<div class="d-empty">${ring('v-off', svg('tram', 30))}<div><h2 class="d-title">Plus de tram de ce côté</h2><p class="d-msg plain">${o.reason ? 'Rien n\u2019est annoncé pour l\u2019instant.' : 'Rien d\u2019annoncé, sans info trafic : fin de service ou interruption.'}</p></div></div>${reason}${alt}`);
   }
   const p0 = ctx.primary;
-  if (!p0) return gray('tram', 'Pas de départ', 'Rien d\u2019annoncé pour le moment.');
+  if (!p0) return gray('tram', 'Aucun départ annoncé', 'Rien pour le moment dans cette direction.');
   const missed = p0.v === 'red' && ctx.nextCatch ? p0 : null;
   const p = missed ? ctx.nextCatch : p0;
   const now = ctx.now, v = p.v || 'none';
+  const md = mood(ctx, p, missed);
   const isLast = ctx.last && Math.abs(ctx.last - p.tArr) < 1;
-  let title, text;
-  if (!p.w) { title = 'Tram ' + esc(p.line); text = `À quai à ${fmtClock(p.tArr)}.`; }
-  else if (v === 'red') { title = 'Trop tard'; text = 'Aucun tram attrapable annoncé.'; }
-  else {
-    const leaveAt = p.tArr - p.w.sec, slack = leaveAt - now;
-    title = missed ? 'Prenez le suivant' : v === 'green' ? 'Vous l\u2019avez' : 'Pressez le pas';
-    text = v === 'orange' ? 'Partez maintenant, d\u2019un bon pas' : slack > 60 ? `Partez à <b>${fmtClock(leaveAt)}</b>` : 'Partez maintenant';
-    if (missed) text += ` · celui dans ${cdSpan(missed, 'min')} est trop proche`;
-  }
-  const lastTag = isLast ? '<span class="m-flag">Dernier tram</span>' : ctx.last ? `<span class="m-flag soft">Dernier à ${fmtClock(ctx.last)}</span>` : '';
-  const facts = [whereText(p, now)];
-  if (p.delay != null && Math.abs(p.delay) >= 60) facts.push(`${p.delay > 0 ? 'retard +' : 'avance '}${Math.abs(Math.round(p.delay / 60))} min`);
-  if (!p.live) facts.push('théorique');
-  if (ctx.remote) {
-    // Itinéraire : l'essentiel en tête (verdict + compte à rebours), puis les étapes.
-    panel('v-' + v + ' plan', `<div class="m-head"><div class="m-count v-${v}">${cdSpan(p)}<small>${p.arrIn > 0 ? 'avant le tram' : 'à quai'}</small></div>
-      <div class="m-head-t"><h2 class="m-title">${title}</h2><p class="m-text">${text}</p></div></div>${lastTag}${planSteps(ctx, p)}`);
+  const flag = isLast ? '<span class="m-flag">Dernier tram de la journée annoncé</span>' : '';
+  const msg = `<p class="d-msg v-${v}">${md.m}</p>`;
+  if (ctx.plan && (p.transfer || p.S.id !== ctx.board.id)) {
+    panel('v-' + v + ' plan', `<div class="d-head"><div class="d-count v-${v}">${cdSpan(p)}<small>${p.arrIn > 0 ? 'avant le tram' : 'à quai'}</small></div>
+      <div class="d-head-t"><h2 class="d-title">${md.t}</h2><p class="d-msg plain strong">${md.m}</p><p class="d-pos-inline">${badge(p.line, 'sm')} ${esc(whereText(p, now))}</p></div></div>${flag}${planSteps(ctx, p)}`);
   } else {
-    const next = ctx.g ? ctx.g.all.filter(x => x.tArr > p.tArr).slice(0, 2) : [];
-    const inner = `${cdSpan(p)}<small>${p.arrIn > 0 ? 'avant le tram' : 'repart ' + fmtClock(p.tDep)}</small>`;
-    panel('v-' + v, `${ring('v-' + v, inner, p.arrIn > 0 ? p.arrIn / 900 : 1)}<h2 class="m-title big">${title}</h2><p class="m-text">${text}</p>${lastTag}
-      <p class="m-facts">Tram ${esc(facts.join(' · '))}${next.length ? `<span> · puis ${next.map(n => cdSpan(n, 'min')).join(', ')}</span>` : ''}</p>`);
+    panel('v-' + v, `${tramCard(p, now, v)}<h2 class="d-title">${md.t}</h2>${msg}${flag}`);
   }
-  const sum = `${title}. Tram ${p.line} vers ${p.dest}, ${p.arrIn > 0 ? 'dans ' + Math.max(1, Math.round(p.arrIn / 60)) + ' minutes' : 'à quai'}.`;
+  const sum = `${md.t}. Tram ${p.line} vers ${p.dest}, ${whereText(p, now)}, ${p.arrIn > 0 ? 'dans ' + Math.max(1, Math.round(p.arrIn / 60)) + ' minutes' : 'à quai'}.`;
   const sr = $('#srVerdict');
   if (sr.textContent !== sum) sr.textContent = sum;
 }
@@ -1488,22 +1515,22 @@ function renderAlert(ctx) {
   setHTML(el, `<button type="button" class="p-alert" data-act="digest">${svg('alert', 16)}<span>${esc(m.title || m.body)}</span>${svg('chevR', 16)}</button>`);
 }
 function renderBottom() {
-  setHTML($('#uSpeed'), state.realKmh ? `Vitesse réelle mesurée : <b>${fmtKmh(state.realKmh)}</b>` : '');
+  setHTML($('#uSpeed'), state.realKmh ? `Calculé sur votre vitesse réelle : <b>${fmtKmh(state.realKmh)}</b>` : '');
 }
 function renderMini(ctx) {
   const el = $('#mini');
-  const p = ctx.primary && ctx.primary.v === 'red' && ctx.nextCatch ? ctx.nextCatch : ctx.primary;
-  const missed = p !== ctx.primary;
-  const title = ctx.off ? 'Plus de tram' : !p ? (ctx.board ? 'Pas de départ' : 'Où êtes-vous ?') : !p.w ? 'Tram ' + p.line : p.v === 'red' ? 'Trop tard' : missed ? 'Prenez le suivant' : p.v === 'green' ? 'Vous l\u2019avez' : 'Pressez le pas';
+  const p0 = ctx.primary;
+  const p = p0 && p0.v === 'red' && ctx.nextCatch ? ctx.nextCatch : p0;
+  const title = ctx.off ? 'Plus de tram de ce côté' : !p ? (ctx.board ? 'Aucun départ annoncé' : 'Où êtes-vous ?') : mood(ctx, p, p !== p0).t;
   const v = ctx.off ? 'off' : p && p.v ? p.v : 'none';
   el.className = 'mini2 v-' + v;
-  setHTML(el, `<span class="mini2-dot"></span><span class="mini2-main"><b>${title}</b><small>${ctx.sel ? `${esc(ctx.sel.line)} vers ${esc(ctx.sel.dest)}` : ''}</small></span>${p && !ctx.off ? `<span class="mini2-cd">${cdSpan(p)}</span>` : ''}`);
+  setHTML(el, `<span class="mini2-dot"></span><span class="mini2-main"><b>${title}</b><small>${p ? `${esc(p.line)} vers ${esc(p.dest)}, ${esc(whereText(p, ctx.now))}` : ''}</small></span>${p && !ctx.off ? `<span class="mini2-cd">${cdSpan(p)}</span>` : ''}`);
 }
 function verdictWords(ctx) {
   const p = ctx.primary;
   if (!p || !p.w) return null;
-  if (p.v === 'red') return { head: 'Trop tard' };
-  return { head: p.v === 'green' ? 'Vous l\u2019avez' : 'Pressez le pas', leaveAt: p.tArr - p.w.sec };
+  if (p.v === 'red') return { head: 'Trop tard pour celui-ci' };
+  return { head: p.v === 'green' ? 'C\u2019est bon pour vous' : 'Ça va se jouer de peu', leaveAt: p.tArr - p.w.sec };
 }
 
 /* ---------- Widget et Live Activity (app iOS) ---------- */
