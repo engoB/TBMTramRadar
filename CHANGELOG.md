@@ -3,6 +3,10 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.7.0
+- Premier lancement : invitation à ajouter l'app à l'écran d'accueil. iPhone : les trois gestes illustrés, avec une flèche vers le bouton Partager. Android : bouton « Installer l'app ».
+- Présentée une seule fois, jamais si l'app est déjà installée ; toujours accessible depuis le menu (« Ajouter à l'écran d'accueil »).
+
 ## 5.6.0
 - Situation instantanée : plus de « Partez à… ». Le tram qui arrive (ligne, destination, où il en est) est mis en avant.
 - « À 2 arrêts » en grand ; retard et passages suivants retirés.

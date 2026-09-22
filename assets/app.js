@@ -98,6 +98,7 @@ const ICONS = {
   compass: '<circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/>',
   clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
   lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  plusSq: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/><path d="M12 8v8"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   chevD: '<path d="m6 9 6 6 6-6"/>',
   chevL: '<path d="m15 18-6-6 6-6"/>',
@@ -1631,6 +1632,7 @@ function renderMenu() {
   setHTML($('#menuBody'), `
     <h3>Lignes affichées</h3>
     <div class="group"><div class="row chips-row">${LINE_IDS.map(l => `<button type="button" class="chip" data-line="${l}" style="--c:${lineColor(l)}" aria-pressed="${state.activeLines.has(l)}">${l}</button>`).join('')}</div></div>
+    ${Install.can() ? `<h3>App</h3><div class="group"><button type="button" class="row" data-act="install"><span class="row-t">Ajouter à l\u2019écran d\u2019accueil</span>${svg('chevR', 16)}</button></div>` : ''}
     <h3>Info trafic</h3>
     <div class="group"><button type="button" class="row" data-act="digest"><span class="row-t">Infos réseau du jour</span><span class="row-v">${n}</span>${svg('chevR', 16)}</button></div>
     <p class="menu-foot">Tram Radar ${state.version ? 'v' + esc(state.version.version) : ''} · horaires TBM en temps réel (Licence Ouverte) · carte © OpenStreetMap · application indépendante, non affiliée à TBM.<br>
@@ -1649,7 +1651,55 @@ function renderOnb() {
     <div class="onb-acts">${s.a.map(([k, l, c]) => `<button type="button" class="btn big ${c || ''}" data-onb="${k}">${l}</button>`).join('')}</div>`;
 }
 function showOnb() { onbStep = 0; renderOnb(); $('#onb').classList.remove('hidden'); }
-function finishOnb() { store.set('tbm-onb', 1); $('#onb').classList.add('hidden'); tickUi(true); }
+function finishOnb() { store.set('tbm-onb', 1); $('#onb').classList.add('hidden'); tickUi(true); Install.maybeShow(); }
+/* ---------- Ajout à l'écran d'accueil (premier lancement) ---------- */
+const Install = (() => {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const ipad = /iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const iosOther = ios && /CriOS|FxiOS|EdgiOS/.test(ua);
+  const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let deferred = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; setTimeout(() => maybeShow(), 0); });
+  window.addEventListener('appinstalled', () => { store.set('tbm-install', 'done'); hide(); toast('Tram Radar est sur votre écran d\u2019accueil'); });
+  const can = () => !Native.isNative && !standalone() && (ios || !!deferred);
+  function hide() { $('#inst').classList.add('hidden'); }
+  function show() {
+    const el = $('#inst');
+    let steps, acts;
+    if (ios) {
+      const where = iosOther ? 'en haut à droite' : ipad ? 'en haut de l\u2019écran' : 'en bas de l\u2019écran';
+      steps = `<ol class="inst-steps">
+        <li><span class="inst-n">1</span><span>Touchez <span class="inst-key">${svg('share', 18)}</span> <b>Partager</b>, ${where}</span></li>
+        <li><span class="inst-n">2</span><span>Choisissez <span class="inst-key">${svg('plusSq', 18)}</span> <b>Sur l\u2019écran d\u2019accueil</b></span></li>
+        <li><span class="inst-n">3</span><span>Touchez <b>Ajouter</b></span></li></ol>`;
+      acts = `<button type="button" class="btn big" data-inst="ok">J\u2019ai compris</button>`;
+    } else {
+      steps = '<p class="inst-p">Un toucher suffit : l\u2019app s\u2019ouvrira ensuite en plein écran, comme une app classique.</p>';
+      acts = `<button type="button" class="btn big" data-inst="install">Installer l\u2019app</button>`;
+    }
+    $('#instBody').innerHTML = `<div class="onb-ico">${LOGO.replace('width="26" height="26"', 'width="54" height="54"')}</div>
+      <h2>Gardez Tram Radar à portée de pouce</h2>
+      <p>Ajoutez-la à votre écran d\u2019accueil : elle s\u2019ouvre en plein écran, en un geste, au moment où vous sortez.</p>
+      ${steps}<div class="onb-acts">${acts}${ios ? '' : '<button type="button" class="btn big ghost" data-inst="later">Plus tard</button>'}</div>`;
+    el.classList.toggle('arrow-bottom', ios && !iosOther && !ipad);
+    el.classList.remove('hidden');
+  }
+  function maybeShow() {
+    if (store.get('tbm-install') || !store.get('tbm-onb') || !can()) return;
+    store.set('tbm-install', 'shown');
+    setTimeout(show, 600);
+  }
+  $('#inst').addEventListener('click', async e => {
+    const b = e.target.closest('[data-inst]'); if (!b) return;
+    const k = b.dataset.inst;
+    if (k === 'install' && deferred) { deferred.prompt(); const r = await deferred.userChoice.catch(() => null); deferred = null; if (r && r.outcome === 'accepted') store.set('tbm-install', 'done'); }
+    hide();
+    tickUi(true);
+  });
+  return { can, show, maybeShow };
+})();
+
 $('#onb').addEventListener('click', e => {
   const b = e.target.closest('[data-onb]'); if (!b) return;
   const k = b.dataset.onb;
@@ -1704,6 +1754,7 @@ function onAction(e) {
     else if (a === 'dir-next') stepDir(1);
     else if (a === 'fav') toggleFav(lastCtx);
     else if (a === 'dirsheet') openSheet('#dirSheet');
+    else if (a === 'install') { closeDlg($('#menu')); Install.show(); }
     else if (a === 'la') toggleLiveActivity();
     else if (a === 'menu') openSheet('#menu');
     else if (a === 'close') closeDlg(act.closest('dialog'));
@@ -1857,7 +1908,7 @@ renderCadence();
 renderLaButton();
 applyZoomClasses();
 renderGps();
-if (store.get('tbm-onb')) startGps(); else showOnb();
+if (store.get('tbm-onb')) { startGps(); Install.maybeShow(); } else showOnb();
 loadNetwork();
 boot(false);
 schedule();

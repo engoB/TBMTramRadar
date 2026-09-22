@@ -1182,3 +1182,17 @@
   @media (max-height:650px){ .steps3 li{min-height:36px;padding:2px 0} .s-t{font-size:14px} .d-head .d-count{width:78px;height:78px} .d-cap{display:none} }
   #ui > .p-main{margin:auto 0}
   .p-allure{margin-top:0}
+
+  /* =================== Ajout à l'écran d'accueil =================== */
+  .inst{z-index:3100}
+  .inst-steps{list-style:none;margin:4px 0 0;padding:6px 16px;width:100%;background:#f6f7f9;border-radius:18px;text-align:left}
+  .inst-steps li{display:flex;align-items:center;gap:12px;padding:10px 0;font-size:16px;color:#374151;line-height:1.35}
+  .inst-steps li + li{border-top:1px solid #eceef2}
+  .inst-n{flex:none;width:26px;height:26px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-size:13px;font-weight:800;display:grid;place-items:center}
+  .inst-steps b{color:#0f172a}
+  .inst-key{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#fff;color:var(--me);vertical-align:middle;box-shadow:0 1px 2px rgba(0,0,0,.08);margin:0 2px}
+  .inst-p{font-size:16px;color:#6b7280}
+  .inst-arrow{display:none}
+  .inst.arrow-bottom .inst-arrow{display:block;position:absolute;left:50%;bottom:calc(var(--safe-b) + 6px);width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-top:18px solid var(--me);transform:translateX(-50%);animation:instBounce 1.2s ease-in-out infinite}
+  @keyframes instBounce{50%{transform:translate(-50%,8px)}}
+  @media (prefers-reduced-motion:reduce){ .inst-arrow{animation:none!important} }
