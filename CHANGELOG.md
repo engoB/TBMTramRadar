@@ -3,6 +3,11 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.9.1
+- Écran « Localisation bloquée » refait : marche à suivre en trois étapes, bouton toujours visible, plus de message flottant qui recouvrait le bouton.
+- Bouton « Ouvrir dans Safari » depuis l'app installée, pour vérifier que la localisation fonctionne.
+- Le détail de l'erreur renvoyée par le téléphone est affiché (code et message), pour diagnostiquer.
+
 ## 5.9.0
 - Localisation immédiate : la dernière position connue (moins de 30 min) s'affiche dès l'ouverture, signalée comme telle, puis un point GPS rapide, puis le suivi haute précision.
 - App ajoutée à l'écran d'accueil : aide adaptée (iOS redemande l'autorisation à chaque ouverture ; fermer puis rouvrir l'app suffit en général).

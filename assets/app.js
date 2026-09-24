@@ -155,7 +155,7 @@ const state = {
   lineMeta: Object.fromEntries(LINE_IDS.map(l => [l, { color: CFG.lines[l].color, shapes: null }])),
   user: null, mode: 'gps', lastGps: null, gps: 'search', firstFix: true,
   activeLines: new Set(savedLines.length ? savedLines : LINE_IDS),
-  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirRemote: false, dirTouched: false, feedHorizon: 0, liveKeys: null, view: store.get('tbm-view') || 'ui', follow: false, margin: 0, liveActivity: null, far: null, betterId: null, stale: false, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
+  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirRemote: false, dirTouched: false, feedHorizon: 0, liveKeys: null, view: store.get('tbm-view') || 'ui', follow: false, margin: 0, liveActivity: null, far: null, betterId: null, stale: false, gpsErr: null, gpsTry: 0, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
   recents: store.get('tbm-recents') || [],
   cadence: store.get('tbm-cadence') || 'normal',
   bannerDismissed: { far: false, nogps: false }, bannerKind: null,
@@ -1164,14 +1164,6 @@ function resumeGps() {
   renderGps();
 }
 let watchId = null;
-function gpsHelp() {
-  const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua);
-  if (!window.isSecureContext) return 'Cette page n\u2019est pas en HTTPS : les navigateurs y interdisent la localisation. Ouvrez l\u2019adresse en https://';
-  if (ios && standaloneApp()) return 'Touchez « Réessayer » : iOS redemande l\u2019autorisation à chaque ouverture. Si rien ne s\u2019affiche, fermez complètement l\u2019app (glissez-la vers le haut) et rouvrez-la. Vérifiez aussi Réglages, Confidentialité, Service de localisation, Safari : « Lors de l\u2019utilisation ».';
-  if (ios) return 'Dans Safari : touchez « aA » à gauche de l\u2019adresse, puis Réglages du site, Localisation, Autoriser. Sinon Réglages iOS, Safari, Position, Demander.';
-  if (/Android/.test(ua)) return 'Dans Chrome : touchez le cadenas à gauche de l\u2019adresse, Autorisations, Position, Autoriser.';
-  return 'Autorisez la localisation pour ce site dans les réglages de votre navigateur.';
-}
 const standaloneApp = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 function useLastFix() {
   const f = store.get('tbm-lastfix');
@@ -1185,6 +1177,20 @@ function saveFix(ll, acc) {
   lastFixSaved = Date.now();
   store.set('tbm-lastfix', { ll, acc, t: Date.now() });
 }
+function gpsSteps() {
+  const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua), app = standaloneApp();
+  if (!window.isSecureContext) return { intro: 'La page n\u2019est pas en HTTPS : les navigateurs y interdisent la localisation.', steps: ['Ouvrez l\u2019adresse en https://'] };
+  if (ios && app) return { intro: 'iOS a mémorisé un refus pour cette app installée.', steps: [
+    'Touchez « Réessayer » : une nouvelle demande est envoyée.',
+    'Sinon, fermez l\u2019app à fond (glissez-la vers le haut) puis rouvrez-la.',
+    'Toujours refusé : supprimez l\u2019icône, ouvrez le site dans Safari, autorisez la position, puis réinstallez l\u2019icône.'] };
+  if (ios) return { intro: 'Safari a mémorisé un refus pour ce site.', steps: [
+    'Touchez « aA » à gauche de l\u2019adresse, Réglages du site, Localisation, Autoriser.',
+    'Ou Réglages, Safari, Position, Demander, puis rechargez la page.'] };
+  if (/Android/.test(ua)) return { intro: 'Le navigateur a mémorisé un refus.', steps: ['Touchez le cadenas à gauche de l\u2019adresse, Autorisations, Position, Autoriser.'] };
+  return { intro: 'Le navigateur bloque la localisation pour ce site.', steps: ['Autorisez la position dans les réglages du site.'] };
+}
+const gpsHelp = () => { const h = gpsSteps(); return h.intro + ' ' + h.steps[0]; };
 function startGps(force) {
   if (watchId != null && !force) return;
   if (force && watchId != null) { try { if (Native.geo) Native.geo.clearWatch({ id: watchId }); else navigator.geolocation.clearWatch(watchId); } catch (_) { /* déjà arrêté */ } watchId = null; }
@@ -1223,6 +1229,7 @@ function onPos(pos) {
   renderGps();
 }
 function onErr(err) {
+  state.gpsErr = { code: err && err.code, message: err && err.message ? String(err.message).slice(0, 80) : '' };
   if (err.code === 1) { state.gps = 'denied'; if (watchId != null) { if (Native.geo) Native.geo.clearWatch({ id: watchId }); else navigator.geolocation.clearWatch(watchId); watchId = null; } if (!state.user) showBanner('nogps', 'vous avez refusé l\u2019accès à votre position'); }
   else if (err.code === 2) { state.gps = state.lastGps ? 'ok' : 'error'; if (!state.user) showBanner('nogps', 'aucun signal de position disponible'); }
   else if (!state.lastGps) { state.gps = 'search'; if (!state.user) showBanner('nogps', 'le signal GPS met du temps à arriver'); }
@@ -1249,7 +1256,7 @@ function renderGps() {
 }
 $('#gps').addEventListener('click', () => {
   if (state.mode !== 'gps') resumeGps();
-  else if (state.gps === 'denied' || state.gps === 'error') { startGps(true); toast(gpsHelp(), true); }
+  else if (state.gps === 'denied' || state.gps === 'error') { state.gpsTry++; startGps(true); toast('Demande envoyée au téléphone…'); }
   else if (state.gps === 'ok' && state.user) map.flyTo(state.user.ll, Math.max(map.getZoom(), 16), { duration: .8 });
   else toast('Recherche du signal GPS en cours…');
 });
@@ -1520,6 +1527,23 @@ function renderVerdict(ctx) {
   }
   if (!ctx.board) {
     const blocked = state.gps === 'denied' || state.gps === 'error';
+    if (blocked) {
+      const h = gpsSteps();
+      const safari = /iPhone|iPad|iPod/.test(navigator.userAgent) && standaloneApp();
+      const el = $('#uVerdict');
+      el.className = 'p-main v-none scrollable';
+      setHTML(el, `<span class="d-cap">Localisation</span>
+        <h2 class="d-title">Localisation bloquée</h2>
+        <p class="d-msg plain">${esc(h.intro)}</p>
+        <ol class="inst-steps">${h.steps.map((x, k) => `<li><span class="inst-n">${k + 1}</span><span>${esc(x)}</span></li>`).join('')}</ol>
+        <div class="u-btns"><button class="btn big" type="button" data-act="gps-on">Réessayer la localisation</button>
+          ${safari ? `<a class="btn big ghost" href="${esc(location.href)}" target="_blank" rel="noopener">Ouvrir dans Safari</a>` : ''}
+          ${Native.app ? '<button class="btn big ghost" type="button" data-act="ios-settings">Ouvrir les réglages</button>' : ''}
+          ${DEMO ? '<button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Démo : place de la Bourse</button>' : ''}</div>
+        <p class="d-fine">Réglages, Confidentialité, Service de localisation, Safari doit être sur « Lors de l\u2019utilisation ».${state.gpsErr ? ` (erreur ${esc(String(state.gpsErr.code))}${state.gpsErr.message ? ' : ' + esc(state.gpsErr.message) : ''}${state.gpsTry ? `, ${state.gpsTry} tentative${state.gpsTry > 1 ? 's' : ''}` : ''})` : ''}</p>`);
+      $('#srVerdict').textContent = 'Localisation bloquée.';
+      return;
+    }
     return gray('locate', blocked ? 'Localisation bloquée' : 'Où êtes-vous ?',
       blocked ? esc(gpsHelp()) : 'Activez la localisation, ou placez-vous à la main dans la vue Carte.',
       `<div class="u-btns"><button class="btn big" type="button" data-act="gps-on">${blocked ? 'Réessayer la localisation' : 'Activer la localisation'}</button>
@@ -1807,7 +1831,7 @@ function onAction(e) {
     else if (a === 'fav') toggleFav(lastCtx);
     else if (a === 'dirsheet') openSheet('#dirSheet');
     else if (a === 'ios-settings' && Native.app) Native.app.openUrl({ url: 'app-settings:' }).catch(() => {});
-    else if (a === 'gps-on') { startGps(true); toast('Répondez « Autoriser » à la demande du navigateur.', true); }
+    else if (a === 'gps-on') { state.gpsTry++; startGps(true); toast('Demande envoyée au téléphone…'); }
     else if (a === 'install') { closeDlg($('#menu')); Install.show(); }
     else if (a === 'la') toggleLiveActivity();
     else if (a === 'menu') openSheet('#menu');

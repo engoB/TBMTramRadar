@@ -1197,3 +1197,8 @@
   @keyframes instBounce{50%{transform:translate(-50%,8px)}}
   @media (prefers-reduced-motion:reduce){ .inst-arrow{animation:none!important} }
   .u-speed .muted-s{color:#8e8e93;font-weight:500}
+  .p-main.scrollable{overflow-y:auto;align-items:stretch;text-align:left;justify-content:flex-start}
+  .p-main.scrollable .inst-steps{background:#fff;padding:2px 14px}
+  .p-main.scrollable .inst-steps li{font-size:15px;padding:9px 0}
+  .d-fine{font-size:12px;color:#8e8e93;line-height:1.4}
+  .u-btns .btn.big{width:100%}
