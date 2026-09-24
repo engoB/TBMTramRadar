@@ -1,0 +1,225 @@
+name: PokéVault - moisson d'illustrations
+on:
+  schedule:
+    # GitHub runs scheduled workflows only from the default branch; execution can be delayed.
+    - cron: '21 2,8,14,20 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'resolve = find unresolved images; pack = download real local files (16 shards)'
+        type: choice
+        options: [resolve, pack]
+        default: resolve
+        required: true
+      rights_confirmed:
+        description: 'I have checked the rights and provider terms for downloading/reusing these scans'
+        type: boolean
+        default: false
+        required: false
+      max_cards:
+        description: 'Unresolved IDs per resolve run (400 recommended)'
+        type: number
+        default: 400
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  # Manual resolve and scheduled resolve MUST NOT race and overwrite the same checkpoint.
+  group: pokevault-images-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'pack' && 'pack' || 'resolve' }}
+  cancel-in-progress: false
+jobs:
+  resolve:
+    if: github.event_name == 'schedule' || inputs.mode == 'resolve'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: write # Only metadata on the dedicated image-data branch; NEVER artwork.
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Restore previous checkpoint and cached catalogues
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p harvest-cache
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=pokevault-image-state&per_page=30" \
+            --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | reverse | .[0].id // empty')
+          if [ -n "$id" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > /tmp/previous-state.zip
+            unzip -qo /tmp/previous-state.zip -d harvest-cache
+          fi
+          # Branch backup survives artifact expiration and makes the harvest durable.
+          if [ ! -s harvest-cache/state.json ]; then
+            git fetch -q origin refs/heads/pokevault-image-data:refs/remotes/origin/pokevault-image-data || true
+            git show refs/remotes/origin/pokevault-image-data:state.json > harvest-cache/state.json || rm -f harvest-cache/state.json
+          fi
+      - name: Resolve unseen French IDs first - free sources only, then due retries
+        env:
+          POKEMONTCG_API_KEY: ${{ secrets.POKEMONTCG_API_KEY }}
+          MAX_CARDS: ${{ inputs.max_cards || 400 }}
+        run: |
+          node scripts/harvest-images.mjs --mode resolve \
+            --index inputs/pokevault-index-visuels.json \
+            --state harvest-cache/state.json --cache-dir harvest-cache \
+            --output harvest-output --max-cards "$MAX_CARDS" --legacy-budget 100 --free-only
+      - name: Generate FR-only unresolved research workbook (6 catalogues, no scraping)
+        if: success()
+        run: |
+          node scripts/image-research.mjs \
+            --fr-cards harvest-cache/catalog-fr.json \
+            --en-cards harvest-cache/catalog-en.json \
+            --state harvest-cache/state.json \
+            --index harvest-output/pokevault-index-enrichi.json \
+            --output harvest-output/research
+      - name: Back up URL index and state to dedicated metadata branch
+        if: always()
+        continue-on-error: true # Artifacts remain a fallback if repository policy blocks branch writes.
+        shell: bash
+        run: |
+          if [ ! -s harvest-cache/state.json ] || [ ! -s harvest-output/pokevault-index-enrichi.json ]; then exit 0; fi
+          git fetch -q origin refs/heads/pokevault-image-data:refs/remotes/origin/pokevault-image-data || true
+          target="$RUNNER_TEMP/pokevault-image-data"
+          if git show-ref --verify --quiet refs/remotes/origin/pokevault-image-data; then
+            git worktree add -q -b image-data-update "$target" origin/pokevault-image-data
+          else
+            git worktree add -q --detach "$target" HEAD
+            git -C "$target" switch --orphan pokevault-image-data
+            git -C "$target" rm -rf . >/dev/null 2>&1 || true
+          fi
+          cp harvest-cache/state.json "$target/state.json"
+          cp harvest-output/pokevault-index-enrichi.json "$target/index.json"
+          git -C "$target" config user.name 'pokevault-harvester[bot]'
+          git -C "$target" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C "$target" add state.json index.json
+          if ! git -C "$target" diff --cached --quiet; then
+            git -C "$target" commit -qm 'Checkpoint verified image URLs and unresolved IDs'
+            git -C "$target" push origin HEAD:refs/heads/pokevault-image-data
+          fi
+      - name: Publish resumable state and catalogues
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokevault-image-state
+          path: |
+            harvest-cache/state.json
+            harvest-cache/catalog-*.json
+            harvest-cache/en-sets.json
+            harvest-cache/set-details/
+            harvest-cache/details/
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Publish enriched URLs and precise missing/retry audit (no artwork)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokevault-image-audit
+          path: |
+            harvest-output/report.json
+            harvest-output/report.md
+            harvest-output/missing-images-report.json
+            harvest-output/missing-images-report.csv
+            harvest-output/pokevault-index-enrichi.json
+            harvest-output/research/
+          if-no-files-found: warn
+          retention-days: 90
+  pack:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'pack' && inputs.rights_confirmed == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Restore last resolved URLs and cached catalogues
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p harvest-cache
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=pokevault-image-state&per_page=30" \
+            --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | reverse | .[0].id // empty')
+          if [ -n "$id" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > /tmp/previous-state.zip
+            unzip -qo /tmp/previous-state.zip -d harvest-cache
+          fi
+          if [ ! -s harvest-cache/state.json ]; then
+            git fetch -q origin refs/heads/pokevault-image-data:refs/remotes/origin/pokevault-image-data || true
+            git show refs/remotes/origin/pokevault-image-data:state.json > harvest-cache/state.json || rm -f harvest-cache/state.json
+          fi
+      - name: Download and validate real image bytes - isolated shard
+        run: |
+          node scripts/harvest-images.mjs --mode pack \
+            --index inputs/pokevault-index-visuels.json \
+            --state harvest-cache/state.json --cache-dir harvest-cache \
+            --output dist --shard '${{ matrix.shard }}/16' --free-only
+          mkdir -p dist/parts
+          mv 'dist/images-part-${{ matrix.shard }}-of-16.json' dist/parts/
+      - name: Publish physical image shard (never commit artwork to source control)
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokevault-image-shard-${{ matrix.shard }}
+          path: |
+            dist/assets/offline/cards/
+            dist/parts/
+            dist/report.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+  assemble:
+    needs: pack
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'pack' && inputs.rights_confirmed == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Retrieve all 16 image shards from this same run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pokevault-image-shard-*
+          path: artifacts
+          merge-multiple: false
+      - name: Build FR-only card inventory and assemble local-image manifest
+        run: |
+          node scripts/build-full-catalog.mjs --inventory-only --fr-only \
+            --index inputs/pokevault-index-visuels.json --output dist
+          node scripts/collect-image-shards.mjs --artifacts artifacts --dist dist --shards 16
+          node scripts/assemble-image-pack.mjs --dir dist --shards 16
+          cat dist/assets/offline/images-assembly-report.json | head -c 500
+      - name: Publish assembly audit and physical-file inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokevault-image-pack-audit
+          path: |
+            dist/assets/offline/images.json
+            dist/assets/offline/images-assembly-report.json
+            dist/assets/offline/catalogue-report.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Publish application shell (shards contain the large image files)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokevault-dist-shell
+          path: |
+            dist/**
+            !dist/assets/offline/cards/**
+            !dist/parts/**
+          if-no-files-found: error
+          retention-days: 14
