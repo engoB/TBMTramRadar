@@ -124,7 +124,7 @@ const Native = (() => {
   const C = window.Capacitor;
   const isNative = !!(C && typeof C.isNativePlatform === 'function' && C.isNativePlatform());
   const P = n => (isNative && typeof C.registerPlugin === 'function' ? C.registerPlugin(n) : null);
-  return { isNative, platform: isNative ? C.getPlatform() : 'web', geo: P('Geolocation'), notif: P('LocalNotifications'), haptics: P('Haptics'), share: P('Share'), status: P('StatusBar'), activity: P('TramActivity') };
+  return { isNative, platform: isNative ? C.getPlatform() : 'web', geo: P('Geolocation'), notif: P('LocalNotifications'), haptics: P('Haptics'), share: P('Share'), status: P('StatusBar'), activity: P('TramActivity'), app: P('App') };
 })();
 
 /* =========================================================
@@ -155,7 +155,7 @@ const state = {
   lineMeta: Object.fromEntries(LINE_IDS.map(l => [l, { color: CFG.lines[l].color, shapes: null }])),
   user: null, mode: 'gps', lastGps: null, gps: 'search', firstFix: true,
   activeLines: new Set(savedLines.length ? savedLines : LINE_IDS),
-  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirRemote: false, dirTouched: false, feedHorizon: 0, liveKeys: null, view: store.get('tbm-view') || 'ui', follow: false, margin: 0, liveActivity: null, far: null, betterId: null, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
+  dest: null, fromId: null, pinned: null, dir: store.get('tbm-dir') || null, dirRemote: false, dirTouched: false, feedHorizon: 0, liveKeys: null, view: store.get('tbm-view') || 'ui', follow: false, margin: 0, liveActivity: null, far: null, betterId: null, stale: false, alert: null, needFit: false, speedSamples: [], realKmh: null, kmhNow: null,
   recents: store.get('tbm-recents') || [],
   cadence: store.get('tbm-cadence') || 'normal',
   bannerDismissed: { far: false, nogps: false }, bannerKind: null,
@@ -1165,11 +1165,25 @@ function resumeGps() {
 }
 let watchId = null;
 function gpsHelp() {
-  const ua = navigator.userAgent;
+  const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua);
   if (!window.isSecureContext) return 'Cette page n\u2019est pas en HTTPS : les navigateurs y interdisent la localisation. Ouvrez l\u2019adresse en https://';
-  if (/iPhone|iPad|iPod/.test(ua)) return 'Dans Safari : touchez « aA » à gauche de l\u2019adresse, puis Réglages du site, Localisation, Autoriser. Sinon Réglages iOS, Safari, Position, Demander.';
+  if (ios && standaloneApp()) return 'Touchez « Réessayer » : iOS redemande l\u2019autorisation à chaque ouverture. Si rien ne s\u2019affiche, fermez complètement l\u2019app (glissez-la vers le haut) et rouvrez-la. Vérifiez aussi Réglages, Confidentialité, Service de localisation, Safari : « Lors de l\u2019utilisation ».';
+  if (ios) return 'Dans Safari : touchez « aA » à gauche de l\u2019adresse, puis Réglages du site, Localisation, Autoriser. Sinon Réglages iOS, Safari, Position, Demander.';
   if (/Android/.test(ua)) return 'Dans Chrome : touchez le cadenas à gauche de l\u2019adresse, Autorisations, Position, Autoriser.';
   return 'Autorisez la localisation pour ce site dans les réglages de votre navigateur.';
+}
+const standaloneApp = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+function useLastFix() {
+  const f = store.get('tbm-lastfix');
+  if (!f || !f.ll || Date.now() - f.t > 30 * 60000 || state.user) return;
+  state.stale = true;
+  setUser(f.ll, f.acc, 'gps');
+}
+let lastFixSaved = 0;
+function saveFix(ll, acc) {
+  if (Date.now() - lastFixSaved < 10000) return;
+  lastFixSaved = Date.now();
+  store.set('tbm-lastfix', { ll, acc, t: Date.now() });
 }
 function startGps(force) {
   if (watchId != null && !force) return;
@@ -1184,12 +1198,17 @@ function startGps(force) {
   }
   if (!('geolocation' in navigator)) { state.gps = 'error'; renderGps(); showBanner('nogps', 'votre navigateur ne propose pas la géolocalisation'); return; }
   state.gps = 'search'; renderGps();
-  watchId = navigator.geolocation.watchPosition(onPos, onErr, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
+  useLastFix();
+  // Point rapide (éventuellement déjà en cache dans le téléphone) pendant que le suivi précis démarre
+  navigator.geolocation.getCurrentPosition(onPos, () => {}, { enableHighAccuracy: false, maximumAge: 60000, timeout: 5000 });
+  watchId = navigator.geolocation.watchPosition(onPos, onErr, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
 }
 function onPos(pos) {
   const ll = [pos.coords.latitude, pos.coords.longitude], acc = pos.coords.accuracy;
   state.lastGps = { ll, acc };
   state.gps = 'ok';
+  state.stale = false;
+  saveFix(ll, acc);
   if (acc < 40) {
     state.speedSamples.push({ t: Date.now(), ll, acc, v: pos.coords.speed != null && pos.coords.speed >= 0 ? pos.coords.speed : null });
     state.speedSamples = state.speedSamples.filter(x => Date.now() - x.t < 60000);
@@ -1363,7 +1382,7 @@ function renderStation(ctx) {
   const el = $('#uStationInfo');
   if (!ctx.board) return setHTML(el, '<span class="trip-cap">Vous êtes près de</span><b class="trip-name muted">Position inconnue</b>');
   const w = ctx.boardW;
-  setHTML(el, `<span class="trip-cap">Vous êtes près de${ctx.forced ? ' · <button type="button" class="trip-reset" data-act="from-clear">revenir à la plus proche</button>' : ''}</span>
+  setHTML(el, `<span class="trip-cap">${state.stale ? 'Dernière position connue · <button type="button" class="trip-reset" data-act="gps-on">actualiser</button>' : 'Vous êtes près de'}${ctx.forced ? ' · <button type="button" class="trip-reset" data-act="from-clear">revenir à la plus proche</button>' : ''}</span>
     <span class="trip-line"><b class="trip-name">${esc(ctx.board.name)}</b>${w ? `<span class="trip-aside">${fmtWalk(w.sec)} à pied</span>` : ''}</span>`);
 }
 
@@ -1504,6 +1523,7 @@ function renderVerdict(ctx) {
     return gray('locate', blocked ? 'Localisation bloquée' : 'Où êtes-vous ?',
       blocked ? esc(gpsHelp()) : 'Activez la localisation, ou placez-vous à la main dans la vue Carte.',
       `<div class="u-btns"><button class="btn big" type="button" data-act="gps-on">${blocked ? 'Réessayer la localisation' : 'Activer la localisation'}</button>
+        ${Native.app && blocked ? '<button class="btn big ghost" type="button" data-act="ios-settings">Ouvrir les réglages de l\u2019iPhone</button>' : ''}
         ${DEMO ? '<button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Démo : place de la Bourse</button>' : ''}</div>`);
   }
   if (ctx.off) {
@@ -1786,6 +1806,7 @@ function onAction(e) {
     else if (a === 'dir-next') stepDir(1);
     else if (a === 'fav') toggleFav(lastCtx);
     else if (a === 'dirsheet') openSheet('#dirSheet');
+    else if (a === 'ios-settings' && Native.app) Native.app.openUrl({ url: 'app-settings:' }).catch(() => {});
     else if (a === 'gps-on') { startGps(true); toast('Répondez « Autoriser » à la demande du navigateur.', true); }
     else if (a === 'install') { closeDlg($('#menu')); Install.show(); }
     else if (a === 'la') toggleLiveActivity();

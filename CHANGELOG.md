@@ -3,6 +3,12 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.9.0
+- Localisation immédiate : la dernière position connue (moins de 30 min) s'affiche dès l'ouverture, signalée comme telle, puis un point GPS rapide, puis le suivi haute précision.
+- App ajoutée à l'écran d'accueil : aide adaptée (iOS redemande l'autorisation à chaque ouverture ; fermer puis rouvrir l'app suffit en général).
+- « Actualiser » directement dans la ligne de position quand elle date.
+- App native : bouton « Ouvrir les réglages de l'iPhone » quand la localisation est refusée (impossible depuis une PWA).
+
 ## 5.8.0
 - Position simulée et repère posé à la main retirés de l'usage courant : l'app fonctionne sur votre vraie position.
 - Ces deux options restent disponibles pour les tests via l'adresse ?demo=1, ou `demo: true` dans assets/config.js (nécessaire pour la validation App Store).
