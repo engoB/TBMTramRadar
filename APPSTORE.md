@@ -33,8 +33,9 @@ Dans les **notes pour l'équipe de validation** (App Store Connect > App Review 
 > mesurée par GPS. Fonctions natives : alertes de départ par notification locale (reprogrammées quand
 > le tram prend du retard), retour haptique à chaque changement de verdict, partage iOS, ouverture
 > dans Plans, favoris, fonctionnement hors ligne. Pour tester hors de Bordeaux : le bandeau « hors du
-> réseau » affiché en haut propose « Place de la Bourse », qui simule une position au centre-ville.
-> On peut aussi toucher la carte (vue Carte) pour se placer. Aucun compte requis.
+> réseau » propose « Démo : place de la Bourse », qui simule une position au centre-ville.
+> Ce mode s'active en mettant `demo: true` dans assets/config.js avant de construire la version
+> soumise ; il est désactivé pour les utilisateurs. Aucun compte requis.
 
 Le bouton de simulation est essentiel : le testeur d'Apple n'est pas à Bordeaux.
 

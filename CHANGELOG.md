@@ -3,6 +3,16 @@
 Le numéro de version se trouve dans `version.json`. Chaque déploiement reçoit en plus
 un build (empreinte du contenu) : les téléphones se mettent à jour tout seuls dès qu'il change.
 
+## 5.8.0
+- Position simulée et repère posé à la main retirés de l'usage courant : l'app fonctionne sur votre vraie position.
+- Ces deux options restent disponibles pour les tests via l'adresse ?demo=1, ou `demo: true` dans assets/config.js (nécessaire pour la validation App Store).
+- Écran « Localisation bloquée » : un seul bouton, « Réessayer la localisation », avec la marche à suivre selon l'appareil.
+
+## 5.7.2
+- Localisation refusée : écran dédié avec « Réessayer la localisation » (nouvelle demande au navigateur), marche à suivre selon l'appareil, et repli « me placer à la main » ou position simulée.
+- L'app détecte l'autorisation donnée après coup dans les réglages du navigateur et redémarre le GPS toute seule.
+- Message explicite si la page n'est pas en HTTPS (les navigateurs y interdisent la localisation).
+
 ## 5.7.1
 - Rames : déplacement lissé ; plus de sauts à chaque actualisation du temps réel ni au passage à la vue Carte.
 - Vue Tram : la carte masquée n'est plus recalculée à chaque image (moins de batterie).

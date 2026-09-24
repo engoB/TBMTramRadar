@@ -1,6 +1,6 @@
 {
   "name": "tram-radar-bordeaux",
-  "version": "5.7.1",
+  "version": "5.8.0",
   "private": true,
   "description": "Tram Radar Bordeaux : savoir en temps réel si vous aurez votre tram.",
   "scripts": {

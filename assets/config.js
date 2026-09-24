@@ -10,6 +10,10 @@ window.TBM_CONFIG = {
   // Relais CORS par défaut (vide = accès direct). Exemple : 'https://tbm-relais.monnom.workers.dev/?url={url}'
   proxy: '',
 
+  // Mode démonstration : autorise la position simulée et le repère posé à la main sur la carte.
+  // Réservé aux tests et à la validation App Store (sinon accessible par l'adresse ?demo=1).
+  demo: false,
+
   // Lien d'assistance affiché dans « À propos » (obligatoire pour l'App Store : page web ou mailto:)
   support: '',
 

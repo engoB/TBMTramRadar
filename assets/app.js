@@ -145,6 +145,12 @@ const kmhOf = id => (CADENCES.find(c => c.id === id) || CADENCES[1]).kmh;
 const KEY_NAMES = ['quinconces', 'place de la bourse', 'gare saint jean', 'victoire', 'porte de bourgogne', 'meriadeck', 'hotel de ville', 'grand theatre', 'stalingrad', 'sainte catherine'];
 const savedLines = (store.get('tbm-lines') || []).filter(l => LINE_IDS.includes(l));
 
+const DEMO = (() => {
+  try {
+    if (new URLSearchParams(location.search).has('demo')) store.set('tbm-demo', 1);
+    return !!store.get('tbm-demo') || !!CFG.demo;
+  } catch (_) { return false; }
+})();
 const state = {
   lineMeta: Object.fromEntries(LINE_IDS.map(l => [l, { color: CFG.lines[l].color, shapes: null }])),
   user: null, mode: 'gps', lastGps: null, gps: 'search', firstFix: true,
@@ -1130,7 +1136,7 @@ const meIcon = source => L.divIcon({ className: 'me-icon', iconSize: [22, 22], i
 function setUser(ll, acc, source) {
   state.user = { ll, acc, source };
   if (!userMarker) {
-    userMarker = L.marker(ll, { icon: meIcon(source), draggable: true, zIndexOffset: 1000, keyboard: false, title: 'Votre position' }).addTo(map);
+    userMarker = L.marker(ll, { icon: meIcon(source), draggable: DEMO, zIndexOffset: 1000, keyboard: false, title: 'Votre position' }).addTo(map);
     userMarker.on('dragend', () => { const q = userMarker.getLatLng(); setManual([q.lat, q.lng], 'manual'); });
   } else { userMarker.setLatLng(ll); if (userMarker._src !== source) userMarker.setIcon(meIcon(source)); }
   userMarker._src = source;
@@ -1158,8 +1164,16 @@ function resumeGps() {
   renderGps();
 }
 let watchId = null;
-function startGps() {
-  if (watchId != null) return;
+function gpsHelp() {
+  const ua = navigator.userAgent;
+  if (!window.isSecureContext) return 'Cette page n\u2019est pas en HTTPS : les navigateurs y interdisent la localisation. Ouvrez l\u2019adresse en https://';
+  if (/iPhone|iPad|iPod/.test(ua)) return 'Dans Safari : touchez « aA » à gauche de l\u2019adresse, puis Réglages du site, Localisation, Autoriser. Sinon Réglages iOS, Safari, Position, Demander.';
+  if (/Android/.test(ua)) return 'Dans Chrome : touchez le cadenas à gauche de l\u2019adresse, Autorisations, Position, Autoriser.';
+  return 'Autorisez la localisation pour ce site dans les réglages de votre navigateur.';
+}
+function startGps(force) {
+  if (watchId != null && !force) return;
+  if (force && watchId != null) { try { if (Native.geo) Native.geo.clearWatch({ id: watchId }); else navigator.geolocation.clearWatch(watchId); } catch (_) { /* déjà arrêté */ } watchId = null; }
   if (Native.geo) {
     state.gps = 'search'; renderGps();
     Native.geo.watchPosition({ enableHighAccuracy: true, timeout: 20000, maximumAge: 3000 }, (pos, err) => {
@@ -1216,8 +1230,7 @@ function renderGps() {
 }
 $('#gps').addEventListener('click', () => {
   if (state.mode !== 'gps') resumeGps();
-  else if (state.gps === 'denied') toast('Autorisez la localisation dans les réglages du navigateur, ou touchez la carte.');
-  else if (state.gps === 'error') toast('GPS indisponible : touchez la carte pour placer votre repère.');
+  else if (state.gps === 'denied' || state.gps === 'error') { startGps(true); toast(gpsHelp(), true); }
   else if (state.gps === 'ok' && state.user) map.flyTo(state.user.ll, Math.max(map.getZoom(), 16), { duration: .8 });
   else toast('Recherche du signal GPS en cours…');
 });
@@ -1253,6 +1266,7 @@ function simulate(spot) {
   toast(spot === 'quinconces' ? 'Position simulée aux Quinconces' : 'Position simulée place de la Bourse');
 }
 map.on('click', e => {
+  if (!DEMO) return;
   if (Date.now() - lastPopupClose < 400) return;
   setManual([e.latlng.lat, e.latlng.lng], 'manual');
   toast('Repère placé. Touchez « Manuel » pour reprendre le GPS.');
@@ -1340,6 +1354,7 @@ function relevantMessages(lines, stations) {
   return state.messages.filter(m => m.lines.some(l => lines.includes(l)) || m.stations.some(s => stations.includes(s)));
 }
 function simButtons() {
+  if (!DEMO) return '';
   return `<div class="u-acts"><button class="btn" type="button" data-act="sim" data-spot="bourse">${svg('pin', 16)}Place de la Bourse</button><button class="btn ghost" type="button" data-act="sim" data-spot="quinconces">Quinconces</button></div>`;
 }
 
@@ -1482,9 +1497,15 @@ function renderVerdict(ctx) {
   if (state.far && state.mode === 'gps') {
     let near = '';
     if (state.lastGps) { let best = null, bd = Infinity; for (const st of stationList()) { const d = hav(state.lastGps.ll, st.ll); if (d < bd) { bd = d; best = st; } } if (best) near = ` Le tram le plus proche est à ${esc(best.name)}, ${fmtDist(bd)}.`; }
-    return gray('pin', 'Un peu loin du tram', `Vous êtes à ${Math.round(state.far / 1000)} km de Bordeaux.${near}`, `<div class="u-btns"><button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Essayer depuis la place de la Bourse</button></div>`);
+    return gray('pin', 'Un peu loin du tram', `Vous êtes à ${Math.round(state.far / 1000)} km de Bordeaux. Le radar couvre le réseau de tramway de la métropole.${near}`, DEMO ? `<div class="u-btns"><button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Démo : place de la Bourse</button></div>` : '');
   }
-  if (!ctx.board) return gray('locate', 'Où êtes-vous ?', 'Activez la localisation, ou placez-vous dans la vue Carte.', `<div class="u-btns"><button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Essayer depuis la place de la Bourse</button></div>`);
+  if (!ctx.board) {
+    const blocked = state.gps === 'denied' || state.gps === 'error';
+    return gray('locate', blocked ? 'Localisation bloquée' : 'Où êtes-vous ?',
+      blocked ? esc(gpsHelp()) : 'Activez la localisation, ou placez-vous à la main dans la vue Carte.',
+      `<div class="u-btns"><button class="btn big" type="button" data-act="gps-on">${blocked ? 'Réessayer la localisation' : 'Activer la localisation'}</button>
+        ${DEMO ? '<button class="btn big ghost" type="button" data-act="sim" data-spot="bourse">Démo : place de la Bourse</button>' : ''}</div>`);
+  }
   if (ctx.off) {
     const s = ctx.sel, o = ctx.off;
     let alt = '';
@@ -1765,6 +1786,7 @@ function onAction(e) {
     else if (a === 'dir-next') stepDir(1);
     else if (a === 'fav') toggleFav(lastCtx);
     else if (a === 'dirsheet') openSheet('#dirSheet');
+    else if (a === 'gps-on') { startGps(true); toast('Répondez « Autoriser » à la demande du navigateur.', true); }
     else if (a === 'install') { closeDlg($('#menu')); Install.show(); }
     else if (a === 'la') toggleLiveActivity();
     else if (a === 'menu') openSheet('#menu');
@@ -1894,6 +1916,11 @@ async function initUpdates() {
     } catch (_) { swReg = null; }
   }
   setInterval(() => checkVersion(false), 10 * 60 * 1000);
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'geolocation' }).then(st => {
+      st.onchange = () => { if (st.state === 'granted' && state.mode === 'gps') startGps(true); };
+    }).catch(() => { /* API absente sur ce navigateur */ });
+  }
 }
 
 
